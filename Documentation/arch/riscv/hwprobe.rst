@@ -241,6 +241,14 @@ The following keys are defined:
        supported as defined in the RISC-V ISA manual starting from commit
        c732a4f39a4 ("Zcmop is ratified/1.0").
 
+  * :c:macro:`RISCV_HWPROBE_EXT_ZAAMO`: The Zaamo extension is supported as
+       defined in the in the RISC-V ISA manual starting from commit e87412e621f1
+       ("integrate Zaamo and Zalrsc text (#1304)").
+
+  * :c:macro:`RISCV_HWPROBE_EXT_ZALRSC`: The Zalrsc extension is supported as
+       defined in the in the RISC-V ISA manual starting from commit e87412e621f1
+       ("integrate Zaamo and Zalrsc text (#1304)").
+
   * :c:macro:`RISCV_HWPROBE_EXT_ZAWRS`: The Zawrs extension is supported as
        ratified in commit 98918c844281 ("Merge pull request #1217 from
        riscv/zawrs") of riscv-isa-manual.
