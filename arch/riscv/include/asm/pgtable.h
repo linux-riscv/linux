@@ -296,6 +296,8 @@ static inline unsigned long pte_napot(pte_t pte)
 	return pte_val(pte) & _PAGE_NAPOT;
 }
 
+#define pte_cont		pte_napot
+
 #define pte_valid_napot(pte)	(pte_present(pte) && pte_napot(pte))
 
 /*
@@ -605,6 +607,49 @@ static inline void ___set_ptes(struct mm_struct *mm, unsigned long addr,
 		pte_val(pteval) += 1 << _PAGE_PFN_SHIFT;
 	}
 }
+
+#ifdef CONFIG_RISCV_ISA_SVNAPOT
+/*
+ * Some hugetlb functions can be called on !present ptes, so we must use the
+ * size parameter when it is passed.
+ */
+static inline int arch_contpte_get_num_contig(pte_t *ptep, unsigned long size,
+					      size_t *pgsize)
+{
+	unsigned long hugepage_shift;
+	pte_t __pte;
+
+	if (size) {
+		if (size >= PGDIR_SIZE)
+			hugepage_shift = PGDIR_SHIFT;
+		else if (size >= P4D_SIZE)
+			hugepage_shift = P4D_SHIFT;
+		else if (size >= PUD_SIZE)
+			hugepage_shift = PUD_SHIFT;
+		else if (size >= PMD_SIZE)
+			hugepage_shift = PMD_SHIFT;
+		else
+			hugepage_shift = PAGE_SHIFT;
+	} else {
+		/*
+		 * We must read the raw value of the pte to get the size of
+		 * the mapping
+		 */
+		__pte = ___ptep_get(ptep);
+
+		/* Make sure __pte is not a swap entry */
+		BUG_ON(!pte_valid_napot(__pte));
+
+		hugepage_shift = PAGE_SHIFT;
+		size = napot_cont_size(napot_cont_order(__pte));
+	}
+
+	if (pgsize)
+		*pgsize = BIT(hugepage_shift);
+
+	return size >> hugepage_shift;
+}
+#endif
 
 static inline void pte_clear(struct mm_struct *mm,
 	unsigned long addr, pte_t *ptep)
