@@ -616,7 +616,9 @@ static inline void ___set_ptes(struct mm_struct *mm, unsigned long addr,
  * we can rely either on this or on size.
  * That's why we first try to get the mapping size from size.
  */
-static inline int arch_contpte_get_num_contig(pte_t *ptep, unsigned long size,
+static inline int arch_contpte_get_num_contig(struct mm_struct *mm,
+					      unsigned long addr,
+					      pte_t *ptep, unsigned long size,
 					      size_t *pgsize)
 {
 	unsigned long hugepage_shift;
