@@ -14,7 +14,10 @@ static inline void cpu_relax(void)
 	__asm__ __volatile__ ("div %0, %0, zero" : "=r" (dummy));
 #endif
 
-#ifdef CONFIG_TOOLCHAIN_HAS_ZIHINTPAUSE
+#ifdef CONFIG_ERRATA_MIPS_P8700_PAUSE_OPCODE
+    /* MIPS P8700 pause opcode */
+    __asm__ __volatile__ (".4byte 0x00501013");
+#elif CONFIG_TOOLCHAIN_HAS_ZIHINTPAUSE
 	/*
 	 * Reduce instruction retirement.
 	 * This assumes the PC changes.
