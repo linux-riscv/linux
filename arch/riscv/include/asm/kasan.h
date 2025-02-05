@@ -25,7 +25,7 @@
  */
 #define KASAN_SHADOW_SCALE_SHIFT	3
 
-#define KASAN_SHADOW_SIZE	(UL(1) << ((VA_BITS - 1) - KASAN_SHADOW_SCALE_SHIFT))
+#define KASAN_SHADOW_SIZE	BIT_ULL((VA_BITS - 1) - KASAN_SHADOW_SCALE_SHIFT)
 /*
  * Depending on the size of the virtual address space, the region may not be
  * aligned on PGDIR_SIZE, so force its alignment to ease its population.
