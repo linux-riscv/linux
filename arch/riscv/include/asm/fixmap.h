@@ -36,6 +36,9 @@ enum fixed_addresses {
 	FIX_P4D,
 	FIX_TEXT_POKE1,
 	FIX_TEXT_POKE0,
+#ifdef CONFIG_ACPI_APEI_GHES
+	FIX_APEI_GHES_IRQ,
+#endif
 	FIX_EARLYCON_MEM_BASE,
 
 	__end_of_permanent_fixed_addresses,
