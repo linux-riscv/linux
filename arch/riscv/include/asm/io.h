@@ -134,6 +134,11 @@ __io_writes_outs(outs, u64, q, __io_pbr(), __io_paw())
 #endif
 
 #include <asm-generic/io.h>
+#define ioremap_cache ioremap_cache
+static inline void __iomem *ioremap_cache(phys_addr_t addr, size_t size)
+{
+	return (__force void *)ioremap_prot(addr, size, _PAGE_KERNEL);
+}
 
 #ifdef CONFIG_MMU
 #define arch_memremap_wb(addr, size)	\
