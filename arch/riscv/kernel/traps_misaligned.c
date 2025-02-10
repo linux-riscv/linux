@@ -716,6 +716,8 @@ static int cpu_online_check_unaligned_access_emulated(unsigned int cpu)
 }
 #endif
 
+static bool misaligned_traps_delegated;
+
 #ifdef CONFIG_RISCV_SBI
 
 struct misaligned_deleg_req {
@@ -731,8 +733,6 @@ static int sbi_request_unaligned_delegation(void)
 
 	return sbi_err_map_linux_errno(ret.error);
 }
-
-static bool misaligned_traps_delegated;
 
 static int cpu_online_sbi_unaligned_setup(unsigned int cpu)
 {
@@ -782,6 +782,7 @@ static int cpu_online_sbi_unaligned_setup(unsigned int cpu __always_unused)
 {
 	return 0;
 }
+
 #endif
 
 int cpu_online_unaligned_access_init(unsigned int cpu)
@@ -792,3 +793,15 @@ int cpu_online_unaligned_access_init(unsigned int cpu)
 
 	return cpu_online_check_unaligned_access_emulated(cpu);
 }
+
+bool misaligned_traps_can_delegate(void)
+{
+	/*
+	 * Either we successfully requested misaligned traps delegation for all
+	 * CPUS or the SBI does not implemented FWFT extension but delegated the
+	 * exception by default.
+	 */
+	return misaligned_traps_delegated ||
+	       all_cpus_unaligned_scalar_access_emulated();
+}
+EXPORT_SYMBOL_GPL(misaligned_traps_can_delegate);
