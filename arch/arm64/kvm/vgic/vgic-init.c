@@ -85,8 +85,8 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 	/* Must be held to avoid race with vCPU creation */
 	lockdep_assert_held(&kvm->lock);
 
-	ret = -EBUSY;
-	if (!lock_all_vcpus(kvm))
+	ret = kvm_lock_all_vcpus(kvm);
+	if (ret)
 		return ret;
 
 	mutex_lock(&kvm->arch.config_lock);
@@ -97,9 +97,12 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 	}
 
 	kvm_for_each_vcpu(i, vcpu, kvm) {
-		if (vcpu_has_run_once(vcpu))
+		if (vcpu_has_run_once(vcpu)) {
+			ret = -EBUSY;
 			goto out_unlock;
+		}
 	}
+
 	ret = 0;
 
 	if (type == KVM_DEV_TYPE_ARM_VGIC_V2)
@@ -124,7 +127,7 @@ int kvm_vgic_create(struct kvm *kvm, u32 type)
 
 out_unlock:
 	mutex_unlock(&kvm->arch.config_lock);
-	unlock_all_vcpus(kvm);
+	kvm_unlock_all_vcpus(kvm);
 	return ret;
 }
 
