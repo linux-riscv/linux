@@ -40,6 +40,12 @@ properties:
             (integer PLL) typically running at 792 MHz (FOUTPOSTDIV), with
             a maximum FOUTVCO of 2376 MHz.
 
+  resets:
+    maxItems: 1
+    description:
+      Required for "thead,th1520-clk-vo". This reset line controls the
+      GPU CLKGEN reset which is required for proper GPU clock operation.
+
   "#clock-cells":
     const: 1
     description:
@@ -50,6 +56,16 @@ required:
   - reg
   - clocks
   - "#clock-cells"
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: thead,th1520-clk-vo
+    then:
+      required:
+        - resets
 
 additionalProperties: false
 
