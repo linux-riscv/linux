@@ -7,6 +7,7 @@
 #include <dt-bindings/interrupt-controller/irq.h>
 #include <dt-bindings/clock/thead,th1520-clk-ap.h>
 #include <dt-bindings/power/thead,th1520-power.h>
+#include <dt-bindings/reset/thead,th1520-reset.h>
 
 / {
 	compatible = "thead,th1520";
@@ -495,6 +496,12 @@
 			reg = <0xff 0xef010000 0x0 0x1000>;
 			clocks = <&osc>;
 			#clock-cells = <1>;
+		};
+
+		rst: reset-controller@ffef528000 {
+			compatible = "thead,th1520-reset";
+			reg = <0xff 0xef528000 0x0 0x4f>;
+			#reset-cells = <1>;
 		};
 
 		clk_vo: clock-controller@ffef528050 {
