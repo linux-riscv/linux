@@ -153,7 +153,7 @@ static bool increase_address_space(struct amd_io_pgtable *pgtable,
 
 out:
 	spin_unlock_irqrestore(&domain->lock, flags);
-	iommu_free_page(pte);
+	iommu_free_pages(pte);
 
 	return ret;
 }
@@ -229,7 +229,7 @@ static u64 *alloc_pte(struct amd_io_pgtable *pgtable,
 
 			/* pte could have been changed somewhere. */
 			if (!try_cmpxchg64(pte, &__pte, __npte))
-				iommu_free_page(page);
+				iommu_free_pages(page);
 			else if (IOMMU_PTE_PRESENT(__pte))
 				*updated = true;
 
