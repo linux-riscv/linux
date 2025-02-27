@@ -1208,10 +1208,17 @@ int irq_domain_translate_twocell(struct irq_domain *d,
 				 unsigned long *out_hwirq,
 				 unsigned int *out_type)
 {
+	u32 irq, type;
+
 	if (WARN_ON(fwspec->param_count < 2))
 		return -EINVAL;
-	*out_hwirq = fwspec->param[0];
-	*out_type = fwspec->param[1] & IRQ_TYPE_SENSE_MASK;
+
+	irq = fwspec->param_count - 2;
+	type = fwspec->param_count - 1;
+
+	*out_hwirq = fwspec->param[irq];
+	*out_type = fwspec->param[type] & IRQ_TYPE_SENSE_MASK;
+
 	return 0;
 }
 EXPORT_SYMBOL_GPL(irq_domain_translate_twocell);
