@@ -1171,50 +1171,38 @@ const struct irq_domain_ops irq_domain_simple_ops = {
 EXPORT_SYMBOL_GPL(irq_domain_simple_ops);
 
 /**
- * irq_domain_translate_onecell() - Generic translate for direct one cell
+ * irq_domain_translate_cells() - Generic translate for up to three cells
  * bindings
  * @d:		Interrupt domain involved in the translation
  * @fwspec:	The firmware interrupt specifier to translate
  * @out_hwirq:	Pointer to storage for the hardware interrupt number
  * @out_type:	Pointer to storage for the interrupt type
  */
-int irq_domain_translate_onecell(struct irq_domain *d,
-				 struct irq_fwspec *fwspec,
-				 unsigned long *out_hwirq,
-				 unsigned int *out_type)
+int irq_domain_translate_cells(struct irq_domain *d,
+			       struct irq_fwspec *fwspec,
+			       unsigned long *out_hwirq,
+			       unsigned int *out_type)
 {
-	if (WARN_ON(fwspec->param_count < 1))
-		return -EINVAL;
-	*out_hwirq = fwspec->param[0];
-	*out_type = IRQ_TYPE_NONE;
-	return 0;
-}
-EXPORT_SYMBOL_GPL(irq_domain_translate_onecell);
+	unsigned int cells = fwspec->param_count;
 
-/**
- * irq_domain_translate_twocell() - Generic translate for direct two cell
- * bindings
- * @d:		Interrupt domain involved in the translation
- * @fwspec:	The firmware interrupt specifier to translate
- * @out_hwirq:	Pointer to storage for the hardware interrupt number
- * @out_type:	Pointer to storage for the interrupt type
- *
- * Device Tree IRQ specifier translation function which works with two cell
- * bindings where the cell values map directly to the hwirq number
- * and linux irq flags.
- */
-int irq_domain_translate_twocell(struct irq_domain *d,
-				 struct irq_fwspec *fwspec,
-				 unsigned long *out_hwirq,
-				 unsigned int *out_type)
-{
-	if (WARN_ON(fwspec->param_count < 2))
+	switch (cells) {
+	case 1:
+		*out_hwirq = fwspec->param[0];
+		*out_type = IRQ_TYPE_NONE;
+		return 0;
+	case 2 ... 3:
+		/*
+		 * For multi cell translations the hardware interrupt number
+		 * and type are in the last two cells.
+		 */
+		*out_hwirq = fwspec->param[cells - 2];
+		*out_type = fwspec->param[cells - 1] & IRQ_TYPE_SENSE_MASK;
+		return 0;
+	default:
 		return -EINVAL;
-	*out_hwirq = fwspec->param[0];
-	*out_type = fwspec->param[1] & IRQ_TYPE_SENSE_MASK;
-	return 0;
+	}
 }
-EXPORT_SYMBOL_GPL(irq_domain_translate_twocell);
+EXPORT_SYMBOL_GPL(irq_domain_translate_cells);
 
 int irq_domain_alloc_descs(int virq, unsigned int cnt, irq_hw_number_t hwirq,
 			   int node, const struct irq_affinity_desc *affinity)
