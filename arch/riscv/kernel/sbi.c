@@ -299,6 +299,103 @@ static int __sbi_rfence_v02(int fid, const struct cpumask *cpu_mask,
 	return 0;
 }
 
+int sbi_fwft_get(u32 feature, unsigned long *value)
+{
+	return -EOPNOTSUPP;
+}
+
+/**
+ * sbi_fwft_set() - Set a feature on all online cpus
+ * @feature: The feature to be set
+ * @value: The feature value to be set
+ * @flags: FWFT feature set flags
+ *
+ * Return: 0 on success, appropriate linux error code otherwise.
+ */
+int sbi_fwft_set(u32 feature, unsigned long value, unsigned long flags)
+{
+	return -EOPNOTSUPP;
+}
+
+struct fwft_set_req {
+	u32 feature;
+	unsigned long value;
+	unsigned long flags;
+	cpumask_t mask;
+};
+
+static void cpu_sbi_fwft_set(void *arg)
+{
+	struct fwft_set_req *req = arg;
+
+	if (sbi_fwft_set(req->feature, req->value, req->flags))
+		cpumask_clear_cpu(smp_processor_id(), &req->mask);
+}
+
+static int sbi_fwft_feature_local_set(u32 feature, unsigned long value,
+				      unsigned long flags,
+				      bool revert_on_fail)
+{
+	int ret;
+	unsigned long prev_value;
+	cpumask_t tmp;
+	struct fwft_set_req req = {
+		.feature = feature,
+		.value = value,
+		.flags = flags,
+	};
+
+	cpumask_copy(&req.mask, cpu_online_mask);
+
+	/* We can not revert if features are locked */
+	if (revert_on_fail && flags & SBI_FWFT_SET_FLAG_LOCK)
+		return -EINVAL;
+
+	/* Reset value is the same for all cpus, read it once. */
+	ret = sbi_fwft_get(feature, &prev_value);
+	if (ret)
+		return ret;
+
+	/* Feature might already be set to the value we want */
+	if (prev_value == value)
+		return 0;
+
+	on_each_cpu_mask(&req.mask, cpu_sbi_fwft_set, &req, 1);
+	if (cpumask_equal(&req.mask, cpu_online_mask))
+		return 0;
+
+	pr_err("Failed to set feature %x for all online cpus, reverting\n",
+	       feature);
+
+	req.value = prev_value;
+	cpumask_copy(&tmp, &req.mask);
+	on_each_cpu_mask(&req.mask, cpu_sbi_fwft_set, &req, 1);
+	if (cpumask_equal(&req.mask, &tmp))
+		return 0;
+
+	return -EINVAL;
+}
+
+/**
+ * sbi_fwft_all_cpus_set() - Set a feature on all online cpus
+ * @feature: The feature to be set
+ * @value: The feature value to be set
+ * @flags: FWFT feature set flags
+ * @revert_on_fail: true if feature value should be restored to it's orignal
+ * 		    value on failure.
+ *
+ * Return: 0 on success, appropriate linux error code otherwise.
+ */
+int sbi_fwft_all_cpus_set(u32 feature, unsigned long value, unsigned long flags,
+			  bool revert_on_fail)
+{
+	if (feature & SBI_FWFT_GLOBAL_FEATURE_BIT)
+		return sbi_fwft_set(feature, value, flags);
+
+	return sbi_fwft_feature_local_set(feature, value, flags,
+					  revert_on_fail);
+}
+
 /**
  * sbi_set_timer() - Program the timer for next timer event.
  * @stime_value: The value after which next timer event should fire.
