@@ -92,6 +92,10 @@ properties:
         items:
           - const: thead,th1520-spi
           - const: snps,dw-apb-ssi
+      - description: SOPHGO SG2042 SoC SPI Controller
+        items:
+          - const: sophgo,sg2042-spi
+          - const: snps,dw-apb-ssi
 
   reg:
     minItems: 1
