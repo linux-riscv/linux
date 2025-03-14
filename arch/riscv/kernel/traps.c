@@ -396,9 +396,12 @@ asmlinkage __visible __trap_section void do_trap_software_check(struct pt_regs *
 	if (user_mode(regs)) {
 		irqentry_enter_from_user_mode(regs);
 
-		/* not a cfi violation, then merge into flow of unknown trap handler */
-		if (!handle_user_cfi_violation(regs))
-			do_trap_unknown(regs);
+		/* handle uprobe event frist */
+		if (!probe_breakpoint_handler(regs)) {
+			/* not a cfi violation, then merge into flow of unknown trap handler */
+			if (!handle_user_cfi_violation(regs))
+				do_trap_unknown(regs);
+		}
 
 		irqentry_exit_to_user_mode(regs);
 	} else {
