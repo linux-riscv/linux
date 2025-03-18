@@ -332,6 +332,8 @@ void __init setup_arch(char **cmdline_p)
 
 	riscv_user_isa_enable();
 	riscv_spinlock_init();
+
+	WARN_ON(1);
 }
 
 bool arch_cpu_is_hotpluggable(int cpu)
