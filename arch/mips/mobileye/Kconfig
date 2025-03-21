@@ -9,6 +9,7 @@ choice
 
 	config MACH_EYEQ5
 		bool "Mobileye EyeQ5 SoC"
+		select ARCH_HAS_DMA_OPS
 
 	config MACH_EYEQ6H
 		bool "Mobileye EyeQ6H SoC"
