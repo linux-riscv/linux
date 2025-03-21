@@ -22,6 +22,7 @@
 #include <linux/iopoll.h>
 #include <linux/ip.h>
 #include <linux/kernel.h>
+#include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/netdevice.h>
@@ -34,6 +35,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/ptp_classify.h>
+#include <linux/regmap.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
 #include <linux/tcp.h>
@@ -4778,6 +4780,86 @@ err_out_phy_exit:
 	return ret;
 }
 
+#define EYEQ5_OLB_GP_TX_SWRST_DIS	BIT(0)		// Tx SW reset
+#define EYEQ5_OLB_GP_TX_M_CLKE		BIT(1)		// Tx M clock enable
+#define EYEQ5_OLB_GP_SYS_SWRST_DIS	BIT(2)		// Sys SW reset
+#define EYEQ5_OLB_GP_SYS_M_CLKE		BIT(3)		// Sys clock enable
+#define EYEQ5_OLB_GP_SGMII_MODE		BIT(4)		// SGMII mode
+#define EYEQ5_OLB_GP_RGMII_DRV		GENMASK(8, 5)	// RGMII mode
+#define EYEQ5_OLB_GP_SMA_DRV		GENMASK(12, 9)
+#define EYEQ5_OLB_GP_RGMII_PD		BIT(13)		// RGMII pull-down
+#define EYEQ5_OLB_GP_MDIO_PU		BIT(14)		// RGMII pull-up
+#define EYEQ5_OLB_GP_RGMII_RX_ST	BIT(15)		// Schmitt trigger on RGMII Rx
+#define EYEQ5_OLB_GP_RGMII_TX_ST	BIT(16)		// Schmitt trigger on RGMII Tx
+#define EYEQ5_OLB_GP_MDIO_ST		BIT(17)
+#define EYEQ5_OLB_GP_MDC_ST		BIT(18)
+#define EYEQ5_OLB_GP_MBIST_ENABLE	BIT(19)
+
+#define EYEQ5_OLB_SGMII_PWR_EN		BIT(0)
+#define EYEQ5_OLB_SGMII_RST_DIS		BIT(1)
+#define EYEQ5_OLB_SGMII_PLL_EN		BIT(2)
+#define EYEQ5_OLB_SGMII_SIG_DET_SW	BIT(3)
+#define EYEQ5_OLB_SGMII_PWR_STATE_MASK	GENMASK(8, 4)
+#define EYEQ5_OLB_SGMII_PWR_STATE	BIT(4)
+#define EYEQ5_OLB_SGMII_TX_ELECT_IDLE	BIT(9)		// Tx elect idle
+#define EYEQ5_OLB_SGMII_POWER_ACK	BIT(16)
+#define EYEQ5_OLB_SGMII_PLL_ACK		BIT(18)
+#define EYEQ5_OLB_SGMII_SIG_DET		BIT(19)
+#define EYEQ5_OLB_SGMII_PWR_STATE_ACK	GENMASK(24, 20)
+
+static int eyeq5_init(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct net_device *netdev = platform_get_drvdata(pdev);
+	struct macb *bp = netdev_priv(netdev);
+	struct device_node *np = dev->of_node;
+	unsigned int gp, sgmii;
+	struct regmap *regmap;
+	unsigned int args[2];
+	unsigned int reg;
+	int ret;
+
+	regmap = syscon_regmap_lookup_by_phandle_args(np, "mobileye,olb", 2, args);
+	if (IS_ERR(regmap))
+		return PTR_ERR(regmap);
+
+	gp = args[0];
+	sgmii = args[1];
+
+	/* Forced reset */
+	regmap_write(regmap, gp, 0);
+	regmap_write(regmap, sgmii, 0);
+	usleep_range(5, 20);
+
+	if (bp->phy_interface == PHY_INTERFACE_MODE_SGMII) {
+		regmap_write(regmap, gp, EYEQ5_OLB_GP_SGMII_MODE);
+
+		reg = EYEQ5_OLB_SGMII_PWR_EN | EYEQ5_OLB_SGMII_RST_DIS |
+		      EYEQ5_OLB_SGMII_PLL_EN;
+		regmap_write(regmap, sgmii, reg);
+
+		ret = regmap_read_poll_timeout(regmap, sgmii, reg,
+					       reg & EYEQ5_OLB_SGMII_PLL_ACK,
+					       1, 100);
+		if (ret)
+			return dev_err_probe(dev, ret, "PLL timeout");
+
+		regmap_read(regmap, sgmii, &reg);
+		reg |= EYEQ5_OLB_SGMII_PWR_STATE | EYEQ5_OLB_SGMII_SIG_DET_SW;
+		regmap_write(regmap, sgmii, reg);
+	}
+
+	regmap_read(regmap, gp, &reg);
+	reg &= ~EYEQ5_OLB_GP_RGMII_DRV;
+	if (phy_interface_mode_is_rgmii(bp->phy_interface))
+		reg |= FIELD_PREP(EYEQ5_OLB_GP_RGMII_DRV, 0x9);
+	reg |= EYEQ5_OLB_GP_TX_SWRST_DIS | EYEQ5_OLB_GP_TX_M_CLKE;
+	reg |= EYEQ5_OLB_GP_SYS_SWRST_DIS | EYEQ5_OLB_GP_SYS_M_CLKE;
+	regmap_write(regmap, gp, reg);
+
+	return macb_init(pdev);
+}
+
 static const struct macb_usrio_config sama7g5_usrio = {
 	.mii = 0,
 	.rmii = 1,
@@ -4946,6 +5028,18 @@ static const struct macb_config versal_config = {
 	.usrio = &macb_default_usrio,
 };
 
+static const struct macb_config eyeq5_config = {
+	.caps = MACB_CAPS_GIGABIT_MODE_AVAILABLE | MACB_CAPS_JUMBO |
+		MACB_CAPS_GEM_HAS_PTP | MACB_CAPS_QUEUE_DISABLE |
+		MACB_CAPS_NO_LSO,
+	.hw_ip_align = 0,
+	.dma_burst_length = 16,
+	.clk_init = macb_clk_init,
+	.init = eyeq5_init,
+	.jumbo_max_len = 10240,
+	.usrio = &macb_default_usrio,
+};
+
 static const struct of_device_id macb_dt_ids[] = {
 	{ .compatible = "cdns,at91sam9260-macb", .data = &at91sam9260_config },
 	{ .compatible = "cdns,macb" },
@@ -4963,6 +5057,7 @@ static const struct of_device_id macb_dt_ids[] = {
 	{ .compatible = "cdns,zynqmp-gem", .data = &zynqmp_config}, /* deprecated */
 	{ .compatible = "cdns,zynq-gem", .data = &zynq_config }, /* deprecated */
 	{ .compatible = "sifive,fu540-c000-gem", .data = &fu540_c000_config },
+	{ .compatible = "mobileye,eyeq5-gem", .data = &eyeq5_config },
 	{ .compatible = "microchip,mpfs-macb", .data = &mpfs_config },
 	{ .compatible = "microchip,sama7g5-gem", .data = &sama7g5_gem_config },
 	{ .compatible = "microchip,sama7g5-emac", .data = &sama7g5_emac_config },
