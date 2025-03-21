@@ -51,6 +51,7 @@ properties:
           - atmel,sama5d2-gem         # GEM IP (10/100) on Atmel sama5d2 SoCs
           - atmel,sama5d3-gem         # Gigabit IP on Atmel sama5d3 SoCs
           - atmel,sama5d4-gem         # GEM IP (10/100) on Atmel sama5d4 SoCs
+          - mobileye,eyeq5-gem        # Mobileye EyeQ5 SoCs
           - cdns,np4-macb             # NP4 SoC devices
           - microchip,sama7g5-emac    # Microchip SAMA7G5 ethernet interface
           - microchip,sama7g5-gem     # Microchip SAMA7G5 gigabit ethernet interface
@@ -136,6 +137,14 @@ properties:
       Node containing PHY children. If this node is not present, then PHYs will
       be direct children.
 
+  mobileye,olb:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    items:
+      - items:
+          - description: phandle to OLB node
+          - description: MAC General-Purpose register offset
+          - description: MAC SGMII register offset
+
 patternProperties:
   "^ethernet-phy@[0-9a-f]$":
     type: object
@@ -173,6 +182,18 @@ allOf:
       properties:
         reg:
           maxItems: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: mobileye,eyeq5-gem
+    then:
+      required:
+        - mobileye,olb
+    else:
+      properties:
+        mobileye,olb: false
 
 unevaluatedProperties: false
 
