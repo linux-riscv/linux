@@ -1193,6 +1193,7 @@ struct macb_usrio_config {
 
 struct macb_config {
 	u32			caps;
+	int			hw_ip_align;
 	unsigned int		dma_burst_length;
 	int	(*clk_init)(struct platform_device *pdev, struct clk **pclk,
 			    struct clk **hclk, struct clk **tx_clk,
@@ -1295,6 +1296,7 @@ struct macb {
 
 	u32			caps;
 	unsigned int		dma_burst_length;
+	int			hw_ip_align;
 
 	phy_interface_t		phy_interface;
 
