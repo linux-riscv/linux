@@ -17,19 +17,8 @@
 #define BREAK_INSTR_SIZE	4
 #endif
 
-#ifndef	__ASSEMBLY__
-
+extern void arch_kgdb_breakpoint(void);
 extern unsigned long kgdb_compiled_break;
-
-static inline void arch_kgdb_breakpoint(void)
-{
-	asm(".global kgdb_compiled_break\n"
-	    ".option norvc\n"
-	    "kgdb_compiled_break: ebreak\n"
-	    ".option rvc\n");
-}
-
-#endif /* !__ASSEMBLY__ */
 
 #define DBG_REG_ZERO "zero"
 #define DBG_REG_RA "ra"
