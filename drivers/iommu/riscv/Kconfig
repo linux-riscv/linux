@@ -18,3 +18,12 @@ config RISCV_IOMMU_PCI
 	def_bool y if RISCV_IOMMU && PCI_MSI
 	help
 	  Support for the PCIe implementation of RISC-V IOMMU architecture.
+
+config RISCV_IOMMU_32BIT
+	bool "Support 4-Byte Accesses on RISC-V IOMMU Registers"
+	depends on RISCV_IOMMU
+	default n
+	help
+	  Support hardware platform whose I/O bus limits access to 4-byte
+	  transfers. When enabled, all accesses to IOMMU registers will be
+	  split into 4-byte accesses.
