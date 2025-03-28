@@ -1544,6 +1544,13 @@ config HAVE_ARCH_PREL32_RELOCATIONS
 	  architectures, and don't require runtime relocation on relocatable
 	  kernels.
 
+config ARCH_WANTS_RELA_DYN
+	bool
+	depends on RELOCATABLE
+	help
+	  This prevents the .rela.dyn section to be stripped from vmlinux since
+	  it is needed to relocate the kernel at runtime.
+
 config ARCH_USE_MEMREMAP_PROT
 	bool
 
