@@ -186,7 +186,7 @@ void flush_pmd_tlb_range(struct vm_area_struct *vma, unsigned long start,
 void flush_pud_tlb_range(struct vm_area_struct *vma, unsigned long start,
 			 unsigned long end)
 {
-	__flush_tlb_range(mm_cpumask(vma->vm_mm), get_mm_asid(vma->vm_mm),
+	__flush_tlb_range(vma->vm_mm, mm_cpumask(vma->vm_mm),
 			  start, end - start, PUD_SIZE);
 }
 #endif
