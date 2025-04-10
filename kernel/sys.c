@@ -2834,6 +2834,7 @@ SYSCALL_DEFINE5(prctl, int, option, unsigned long, arg2, unsigned long, arg3,
 		if (arg3 || arg4 || arg5)
 			return -EINVAL;
 		error = posixtimer_create_prctl(arg2);
+		break;
 	case PR_GET_INDIR_BR_LP_STATUS:
 		if (arg3 || arg4 || arg5)
 			return -EINVAL;
