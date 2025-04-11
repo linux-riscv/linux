@@ -7,6 +7,7 @@
  */
 
 #include <linux/init.h>
+#include <linux/bits.h>
 #include <linux/mm.h>
 #include <linux/memblock.h>
 #include <linux/initrd.h>
@@ -844,6 +845,37 @@ static void __init set_mmap_rnd_bits_max(void)
 	mmap_rnd_bits_max = MMAP_VA_BITS - PAGE_SHIFT - 3;
 }
 
+static int __init canonical_vaddr(unsigned long vaddr)
+{
+#ifdef CONFIG_64BIT
+	unsigned long sv_mode_mask;
+	unsigned long masked_vaddr;
+	unsigned long mask_begin;
+
+	switch (satp_mode) {
+	case SATP_MODE_57:
+		mask_begin = 56;
+		break;
+	case SATP_MODE_48:
+		mask_begin = 47;
+		break;
+	case SATP_MODE_39:
+		mask_begin = 38;
+		break;
+	default:
+		panic("Unknown Virtual Memory mode!");
+	}
+
+	sv_mode_mask = GENMASK(63, mask_begin);
+	masked_vaddr = vaddr & sv_mode_mask;
+
+	// For SV<X> bits [63, X-1] must be all ones or zeros
+	return masked_vaddr == 0 || masked_vaddr == sv_mode_mask;
+#else
+	return true;
+#endif
+}
+
 /*
  * There is a simple way to determine if 4-level is supported by the
  * underlying hardware: establish 1:1 mapping in 4-level page table mode
@@ -887,12 +919,15 @@ retry:
 				(uintptr_t)early_p4d : (uintptr_t)early_pud,
 			   PGDIR_SIZE, PAGE_TABLE);
 
+	hw_satp = 0ULL;
 	identity_satp = PFN_DOWN((uintptr_t)&early_pg_dir) | satp_mode;
 
-	local_flush_tlb_all();
-	csr_write(CSR_SATP, identity_satp);
-	hw_satp = csr_swap(CSR_SATP, 0ULL);
-	local_flush_tlb_all();
+	if (canonical_vaddr((uint64_t)set_satp_mode_pmd)) {
+		local_flush_tlb_all();
+		csr_write(CSR_SATP, identity_satp);
+		hw_satp = csr_swap(CSR_SATP, 0ULL);
+		local_flush_tlb_all();
+	}
 
 	if (hw_satp != identity_satp) {
 		if (pgtable_l5_enabled) {
