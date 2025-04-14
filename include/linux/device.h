@@ -881,6 +881,17 @@ static inline bool device_async_suspend_enabled(struct device *dev)
 	return !!dev->power.async_suspend;
 }
 
+static inline bool device_platform_resources_pm_managed(struct device *dev)
+{
+	return dev->power.platform_resources_managed;
+}
+
+static inline void device_platform_resources_set_pm_managed(struct device *dev,
+							    bool val)
+{
+	dev->power.platform_resources_managed = val;
+}
+
 static inline bool device_pm_not_required(struct device *dev)
 {
 	return dev->power.no_pm;
