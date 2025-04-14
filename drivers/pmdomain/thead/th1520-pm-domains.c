@@ -5,10 +5,13 @@
  * Author: Michal Wilczynski <m.wilczynski@samsung.com>
  */
 
+#include <linux/clk.h>
+#include <linux/delay.h>
 #include <linux/firmware/thead/thead,th1520-aon.h>
 #include <linux/slab.h>
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
+#include <linux/reset.h>
 
 #include <dt-bindings/power/thead,th1520-power.h>
 
@@ -16,6 +19,15 @@ struct th1520_power_domain {
 	struct th1520_aon_chan *aon_chan;
 	struct generic_pm_domain genpd;
 	u32 rsrc;
+
+	/* PM-owned reset */
+	struct reset_control *clkgen_reset;
+
+	/* Device-specific resources */
+	struct device *attached_dev;
+	struct clk_bulk_data *clks;
+	int num_clks;
+	struct reset_control *gpu_reset;
 };
 
 struct th1520_power_info {
@@ -61,6 +73,177 @@ static int th1520_pd_power_off(struct generic_pm_domain *domain)
 	return th1520_aon_power_update(pd->aon_chan, pd->rsrc, false);
 }
 
+static int th1520_gpu_init_consumer_clocks(struct device *dev,
+					   struct th1520_power_domain *pd)
+{
+	static const char *const clk_names[] = { "core", "sys" };
+	int i, ret;
+
+	pd->num_clks = ARRAY_SIZE(clk_names);
+	pd->clks = devm_kcalloc(dev, pd->num_clks, sizeof(*pd->clks), GFP_KERNEL);
+	if (!pd->clks)
+		return -ENOMEM;
+
+	for (i = 0; i < pd->num_clks; i++)
+		pd->clks[i].id = clk_names[i];
+
+	ret = devm_clk_bulk_get(dev, pd->num_clks, pd->clks);
+	if (ret)
+		return dev_err_probe(dev, ret, "Failed to get GPU clocks\n");
+
+	return 0;
+}
+
+static int th1520_gpu_init_consumer_reset(struct device *dev,
+					  struct th1520_power_domain *pd)
+{
+	int ret;
+
+	pd->gpu_reset = reset_control_get_exclusive(dev, NULL);
+	if (IS_ERR(pd->gpu_reset)) {
+		ret = PTR_ERR(pd->gpu_reset);
+		pd->gpu_reset = NULL;
+		return dev_err_probe(dev, ret, "Failed to get GPU reset\n");
+	}
+
+	return 0;
+}
+
+static int th1520_gpu_init_pm_reset(struct device *dev,
+				    struct th1520_power_domain *pd)
+{
+	pd->clkgen_reset = devm_reset_control_get_exclusive(dev, "gpu-clkgen");
+	if (IS_ERR(pd->clkgen_reset))
+		return dev_err_probe(dev, PTR_ERR(pd->clkgen_reset),
+				     "Failed to get GPU clkgen reset\n");
+
+	return 0;
+}
+
+static int th1520_gpu_domain_attach_dev(struct generic_pm_domain *genpd,
+					struct device *dev)
+{
+	struct th1520_power_domain *pd = to_th1520_power_domain(genpd);
+	int ret;
+
+	/* Enforce 1:1 mapping - only one device can be attached. */
+	if (pd->attached_dev)
+		return -EBUSY;
+
+	/* Initialize clocks using the consumer device */
+	ret = th1520_gpu_init_consumer_clocks(dev, pd);
+	if (ret)
+		return ret;
+
+	/* Initialize consumer reset using the consumer device */
+	ret = th1520_gpu_init_consumer_reset(dev, pd);
+	if (ret) {
+		if (pd->clks) {
+			clk_bulk_put(pd->num_clks, pd->clks);
+			kfree(pd->clks);
+			pd->clks = NULL;
+			pd->num_clks = 0;
+		}
+		return ret;
+	}
+
+	/* Mark device as platform PM driver managed */
+	device_platform_resources_set_pm_managed(dev, true);
+	pd->attached_dev = dev;
+
+	return 0;
+}
+
+static void th1520_gpu_domain_detach_dev(struct generic_pm_domain *genpd,
+					 struct device *dev)
+{
+	struct th1520_power_domain *pd = to_th1520_power_domain(genpd);
+
+	/* Ensure this is the device we have attached */
+	if (pd->attached_dev != dev) {
+		dev_warn(dev,
+			 "tried to detach from GPU domain but not attached\n");
+		return;
+	}
+
+	/* Remove PM managed flag when detaching */
+	device_platform_resources_set_pm_managed(dev, false);
+
+	/* Clean up the consumer-owned resources */
+	if (pd->gpu_reset) {
+		reset_control_put(pd->gpu_reset);
+		pd->gpu_reset = NULL;
+	}
+
+	if (pd->clks) {
+		clk_bulk_put(pd->num_clks, pd->clks);
+		kfree(pd->clks);
+		pd->clks = NULL;
+		pd->num_clks = 0;
+	}
+
+	pd->attached_dev = NULL;
+}
+
+static int th1520_gpu_domain_start(struct device *dev)
+{
+	struct generic_pm_domain *genpd = pd_to_genpd(dev->pm_domain);
+	struct th1520_power_domain *pd = to_th1520_power_domain(genpd);
+	int ret;
+
+	/* Check if we have all required resources */
+	if (pd->attached_dev != dev || !pd->clks || !pd->gpu_reset ||
+	    !pd->clkgen_reset)
+		return -ENODEV;
+
+	ret = clk_bulk_prepare_enable(pd->num_clks, pd->clks);
+	if (ret)
+		return ret;
+
+	ret = reset_control_deassert(pd->clkgen_reset);
+	if (ret)
+		goto err_disable_clks;
+
+	/*
+	 * According to the hardware manual, a delay of at least 32 clock
+	 * cycles is required between de-asserting the clkgen reset and
+	 * de-asserting the GPU reset. Assuming a worst-case scenario with
+	 * a very high GPU clock frequency, a delay of 1 microsecond is
+	 * sufficient to ensure this requirement is met across all
+	 * feasible GPU clock speeds.
+	 */
+	udelay(1);
+
+	ret = reset_control_deassert(pd->gpu_reset);
+	if (ret)
+		goto err_assert_clkgen;
+
+	return 0;
+
+err_assert_clkgen:
+	reset_control_assert(pd->clkgen_reset);
+err_disable_clks:
+	clk_bulk_disable_unprepare(pd->num_clks, pd->clks);
+	return ret;
+}
+
+static int th1520_gpu_domain_stop(struct device *dev)
+{
+	struct generic_pm_domain *genpd = pd_to_genpd(dev->pm_domain);
+	struct th1520_power_domain *pd = to_th1520_power_domain(genpd);
+
+	/* Check if we have all required resources and if this is the attached device */
+	if (pd->attached_dev != dev || !pd->clks || !pd->gpu_reset ||
+	    !pd->clkgen_reset)
+		return -ENODEV;
+
+	reset_control_assert(pd->gpu_reset);
+	reset_control_assert(pd->clkgen_reset);
+	clk_bulk_disable_unprepare(pd->num_clks, pd->clks);
+
+	return 0;
+}
+
 static struct generic_pm_domain *th1520_pd_xlate(const struct of_phandle_args *spec,
 						 void *data)
 {
@@ -98,6 +281,22 @@ th1520_add_pm_domain(struct device *dev, const struct th1520_power_info *pi)
 	pd->genpd.power_on = th1520_pd_power_on;
 	pd->genpd.power_off = th1520_pd_power_off;
 	pd->genpd.name = pi->name;
+
+	/* there are special callbacks for the GPU */
+	if (pi == &th1520_pd_ranges[TH1520_GPU_PD]) {
+		/* Initialize the PM-owned reset */
+		ret = th1520_gpu_init_pm_reset(dev, pd);
+		if (ret)
+			return ERR_PTR(ret);
+
+		/* No device attached yet */
+		pd->attached_dev = NULL;
+
+		pd->genpd.dev_ops.start = th1520_gpu_domain_start;
+		pd->genpd.dev_ops.stop = th1520_gpu_domain_stop;
+		pd->genpd.attach_dev = th1520_gpu_domain_attach_dev;
+		pd->genpd.detach_dev = th1520_gpu_domain_detach_dev;
+	}
 
 	ret = pm_genpd_init(&pd->genpd, NULL, true);
 	if (ret)
