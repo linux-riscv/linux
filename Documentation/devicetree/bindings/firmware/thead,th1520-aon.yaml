@@ -32,6 +32,13 @@ properties:
     items:
       - const: aon
 
+  resets:
+    maxItems: 1
+
+  reset-names:
+    items:
+      - const: gpu-clkgen
+
   "#power-domain-cells":
     const: 1
 
@@ -39,6 +46,8 @@ required:
   - compatible
   - mboxes
   - mbox-names
+  - resets
+  - reset-names
   - "#power-domain-cells"
 
 additionalProperties: false
@@ -49,5 +58,7 @@ examples:
         compatible = "thead,th1520-aon";
         mboxes = <&mbox_910t 1>;
         mbox-names = "aon";
+        resets = <&rst 0>;
+        reset-names = "gpu-clkgen";
         #power-domain-cells = <1>;
     };
