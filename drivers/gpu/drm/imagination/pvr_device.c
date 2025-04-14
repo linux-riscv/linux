@@ -504,10 +504,16 @@ pvr_device_init(struct pvr_device *pvr_dev)
 	if (err)
 		return err;
 
-	/* Enable and initialize clocks required for the device to operate. */
-	err = pvr_device_clk_init(pvr_dev);
-	if (err)
-		return err;
+	/*
+	 * Only initialize clocks if they are not managed by the platform's
+	 * PM domain.
+	 */
+	if (!device_platform_resources_pm_managed(dev)) {
+		/* Enable and initialize clocks required for the device to operate. */
+		err = pvr_device_clk_init(pvr_dev);
+		if (err)
+			return err;
+	}
 
 	/* Explicitly power the GPU so we can access control registers before the FW is booted. */
 	err = pm_runtime_resume_and_get(dev);
