@@ -115,6 +115,9 @@
 	\old_c
 .endm
 
+#define __ALTERNATIVE_CFG(old_c, ...)	\
+	ALTERNATIVE_CFG old_c
+
 #define _ALTERNATIVE_CFG(old_c, ...)	\
 	ALTERNATIVE_CFG old_c
 
