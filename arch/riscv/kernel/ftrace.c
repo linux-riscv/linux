@@ -13,6 +13,7 @@
 #include <asm/cacheflush.h>
 #include <asm/text-patching.h>
 
+#ifdef CONFIG_DYNAMIC_FTRACE
 unsigned long ftrace_call_adjust(unsigned long addr)
 {
 	if (IS_ENABLED(CONFIG_DYNAMIC_FTRACE_WITH_CALL_OPS))
@@ -26,7 +27,6 @@ unsigned long arch_ftrace_get_symaddr(unsigned long fentry_ip)
 	return fentry_ip - MCOUNT_AUIPC_SIZE;
 }
 
-#ifdef CONFIG_DYNAMIC_FTRACE
 void arch_ftrace_update_code(int command)
 {
 	mutex_lock(&text_mutex);
@@ -191,7 +191,12 @@ int ftrace_update_ftrace_func(ftrace_func_t func)
 	return 0;
 }
 
-#endif
+#else /* CONFIG_DYNAMIC_FTRACE */
+unsigned long ftrace_call_adjust(unsigned long addr)
+{
+	return addr;
+}
+#endif /* CONFIG_DYNAMIC_FTRACE */
 
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS
 int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
