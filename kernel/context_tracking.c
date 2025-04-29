@@ -72,6 +72,70 @@ static __always_inline void rcu_task_trace_heavyweight_exit(void)
 #endif /* #ifdef CONFIG_TASKS_TRACE_RCU */
 }
 
+#ifdef CONFIG_CONTEXT_TRACKING_WORK
+static noinstr void ct_work_flush(unsigned long seq)
+{
+	int bit;
+
+	seq = (seq & CT_WORK_MASK) >> CT_WORK_START;
+
+	/*
+	 * arch_context_tracking_work() must be noinstr, non-blocking,
+	 * and NMI safe.
+	 */
+	for_each_set_bit(bit, &seq, CT_WORK_MAX)
+		arch_context_tracking_work(BIT(bit));
+}
+
+/**
+ * ct_set_cpu_work - set work to be run at next kernel context entry
+ *
+ * If @cpu is not currently executing in kernelspace, it will execute the
+ * callback mapped to @work (see arch_context_tracking_work()) at its next
+ * entry into ct_kernel_enter_state().
+ *
+ * If it is already executing in kernelspace, this will be a no-op.
+ */
+bool ct_set_cpu_work(unsigned int cpu, enum ct_work work)
+{
+	struct context_tracking *ct = per_cpu_ptr(&context_tracking, cpu);
+	unsigned int old;
+	bool ret = false;
+
+	if (!ct->active)
+		return false;
+
+	preempt_disable();
+
+	old = atomic_read(&ct->state);
+
+	/*
+	 * The work bit must only be set if the target CPU is not executing
+	 * in kernelspace.
+	 * CT_RCU_WATCHING is used as a proxy for that - if the bit is set, we
+	 * know for sure the CPU is executing in the kernel whether that be in
+	 * NMI, IRQ or process context.
+	 * Set CT_RCU_WATCHING here and let the cmpxchg do the check for us;
+	 * the state could change between the atomic_read() and the cmpxchg().
+	 */
+	old |= CT_RCU_WATCHING;
+	/*
+	 * Try setting the work until either
+	 * - the target CPU has entered kernelspace
+	 * - the work has been set
+	 */
+	do {
+		ret = atomic_try_cmpxchg(&ct->state, &old, old | (work << CT_WORK_START));
+	} while (!ret && !(old & CT_RCU_WATCHING));
+
+	preempt_enable();
+	return ret;
+}
+#else
+static __always_inline void ct_work_flush(unsigned long work) { }
+static __always_inline void ct_work_clear(struct context_tracking *ct) { }
+#endif
+
 /*
  * Record entry into an extended quiescent state.  This is only to be
  * called when not already in an extended quiescent state, that is,
@@ -88,7 +152,7 @@ static noinstr void ct_kernel_exit_state(int offset)
 	rcu_task_trace_heavyweight_enter();  // Before CT state update!
 	// RCU is still watching.  Better not be in extended quiescent state!
 	WARN_ON_ONCE(IS_ENABLED(CONFIG_RCU_EQS_DEBUG) && !rcu_is_watching_curr_cpu());
-	(void)ct_state_inc(offset);
+	(void)ct_state_inc_clear_work(offset);
 	// RCU is no longer watching.
 }
 
@@ -99,7 +163,7 @@ static noinstr void ct_kernel_exit_state(int offset)
  */
 static noinstr void ct_kernel_enter_state(int offset)
 {
-	int seq;
+	unsigned long seq;
 
 	/*
 	 * CPUs seeing atomic_add_return() must see prior idle sojourns,
@@ -107,6 +171,7 @@ static noinstr void ct_kernel_enter_state(int offset)
 	 * critical section.
 	 */
 	seq = ct_state_inc(offset);
+	ct_work_flush(seq);
 	// RCU is now watching.  Better not be in an extended quiescent state!
 	rcu_task_trace_heavyweight_exit();  // After CT state update!
 	WARN_ON_ONCE(IS_ENABLED(CONFIG_RCU_EQS_DEBUG) && !(seq & CT_RCU_WATCHING));
