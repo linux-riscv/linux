@@ -128,7 +128,7 @@ void virt_arch_pgd_alloc(struct kvm_vm *vm)
 static void _virt_pg_map(struct kvm_vm *vm, u64 vaddr, u64 paddr,
 			 u64 flags)
 {
-	uint8_t attr_idx = flags & (PTE_ATTRINDX_MASK >> PTE_ATTRINDX_SHIFT);
+	u8 attr_idx = flags & (PTE_ATTRINDX_MASK >> PTE_ATTRINDX_SHIFT);
 	u64 pg_attr;
 	u64 *ptep;
 
@@ -230,7 +230,7 @@ gpa_t addr_arch_gva2gpa(struct kvm_vm *vm, gva_t gva)
 	return pte_addr(vm, *ptep) + (gva & (vm->page_size - 1));
 }
 
-static void pte_dump(FILE *stream, struct kvm_vm *vm, uint8_t indent, u64 page, int level)
+static void pte_dump(FILE *stream, struct kvm_vm *vm, u8 indent, u64 page, int level)
 {
 #ifdef DEBUG
 	static const char * const type[] = { "", "pud", "pmd", "pte" };
@@ -249,7 +249,7 @@ static void pte_dump(FILE *stream, struct kvm_vm *vm, uint8_t indent, u64 page, 
 #endif
 }
 
-void virt_arch_dump(FILE *stream, struct kvm_vm *vm, uint8_t indent)
+void virt_arch_dump(FILE *stream, struct kvm_vm *vm, u8 indent)
 {
 	int level = 4 - (vm->pgtable_levels - 1);
 	u64 pgd, *ptep;
@@ -364,7 +364,7 @@ void aarch64_vcpu_setup(struct kvm_vcpu *vcpu, struct kvm_vcpu_init *init)
 	vcpu_set_reg(vcpu, KVM_ARM64_SYS_REG(SYS_TPIDR_EL1), vcpu->id);
 }
 
-void vcpu_arch_dump(FILE *stream, struct kvm_vcpu *vcpu, uint8_t indent)
+void vcpu_arch_dump(FILE *stream, struct kvm_vcpu *vcpu, u8 indent)
 {
 	u64 pstate, pc;
 
