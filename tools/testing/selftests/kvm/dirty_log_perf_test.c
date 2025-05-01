@@ -129,7 +129,7 @@ struct test_params {
 	bool partition_vcpu_memory_access;
 	enum vm_mem_backing_src_type backing_src;
 	int slots;
-	uint32_t write_percent;
+	u32 write_percent;
 	bool random_access;
 };
 

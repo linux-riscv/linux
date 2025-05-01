@@ -25,7 +25,7 @@ enum smccc_conduit {
 #define for_each_conduit(conduit)					\
 	for (conduit = HVC_INSN; conduit <= SMC_INSN; conduit++)
 
-static void guest_main(uint32_t func_id, enum smccc_conduit conduit)
+static void guest_main(u32 func_id, enum smccc_conduit conduit)
 {
 	struct arm_smccc_res res;
 
@@ -37,7 +37,7 @@ static void guest_main(uint32_t func_id, enum smccc_conduit conduit)
 	GUEST_SYNC(res.a0);
 }
 
-static int __set_smccc_filter(struct kvm_vm *vm, uint32_t start, uint32_t nr_functions,
+static int __set_smccc_filter(struct kvm_vm *vm, u32 start, u32 nr_functions,
 			      enum kvm_smccc_filter_action action)
 {
 	struct kvm_smccc_filter filter = {
@@ -50,7 +50,7 @@ static int __set_smccc_filter(struct kvm_vm *vm, uint32_t start, uint32_t nr_fun
 				     KVM_ARM_VM_SMCCC_FILTER, &filter);
 }
 
-static void set_smccc_filter(struct kvm_vm *vm, uint32_t start, uint32_t nr_functions,
+static void set_smccc_filter(struct kvm_vm *vm, u32 start, u32 nr_functions,
 			     enum kvm_smccc_filter_action action)
 {
 	int ret = __set_smccc_filter(vm, start, nr_functions, action);
@@ -99,7 +99,7 @@ static void test_filter_reserved_range(void)
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm = setup_vm(&vcpu);
-	uint32_t smc64_fn;
+	u32 smc64_fn;
 	int r;
 
 	r = __set_smccc_filter(vm, ARM_SMCCC_ARCH_WORKAROUND_1,
@@ -204,7 +204,7 @@ static void test_filter_denied(void)
 	}
 }
 
-static void expect_call_fwd_to_user(struct kvm_vcpu *vcpu, uint32_t func_id,
+static void expect_call_fwd_to_user(struct kvm_vcpu *vcpu, u32 func_id,
 				    enum smccc_conduit conduit)
 {
 	struct kvm_run *run = vcpu->run;

@@ -24,7 +24,7 @@
  * function.
  */
 struct test_args {
-	uint32_t nr_irqs; /* number of KVM supported IRQs. */
+	u32 nr_irqs; /* number of KVM supported IRQs. */
 	bool eoi_split; /* 1 is eoir+dir, 0 is eoir only */
 	bool level_sensitive; /* 1 is level, 0 is edge */
 	int kvm_max_routes; /* output of KVM_CAP_IRQ_ROUTING */
@@ -63,15 +63,15 @@ typedef enum {
 
 struct kvm_inject_args {
 	kvm_inject_cmd cmd;
-	uint32_t first_intid;
-	uint32_t num;
+	u32 first_intid;
+	u32 num;
 	int level;
 	bool expect_failure;
 };
 
 /* Used on the guest side to perform the hypercall. */
-static void kvm_inject_call(kvm_inject_cmd cmd, uint32_t first_intid,
-		uint32_t num, int level, bool expect_failure);
+static void kvm_inject_call(kvm_inject_cmd cmd, u32 first_intid,
+			    u32 num, int level, bool expect_failure);
 
 /* Used on the host side to get the hypercall info. */
 static void kvm_inject_get_call(struct kvm_vm *vm, struct ucall *uc,
@@ -133,7 +133,7 @@ static struct kvm_inject_desc set_active_fns[] = {
 
 /* Shared between the guest main thread and the IRQ handlers. */
 volatile u64 irq_handled;
-volatile uint32_t irqnr_received[MAX_SPI + 1];
+volatile u32 irqnr_received[MAX_SPI + 1];
 
 static void reset_stats(void)
 {
@@ -158,11 +158,11 @@ static void gic_write_ap1r0(u64 val)
 	isb();
 }
 
-static void guest_set_irq_line(uint32_t intid, uint32_t level);
+static void guest_set_irq_line(u32 intid, u32 level);
 
 static void guest_irq_generic_handler(bool eoi_split, bool level_sensitive)
 {
-	uint32_t intid = gic_get_and_ack_irq();
+	u32 intid = gic_get_and_ack_irq();
 
 	if (intid == IAR_SPURIOUS)
 		return;
@@ -188,8 +188,8 @@ static void guest_irq_generic_handler(bool eoi_split, bool level_sensitive)
 	GUEST_ASSERT(!gic_irq_get_pending(intid));
 }
 
-static void kvm_inject_call(kvm_inject_cmd cmd, uint32_t first_intid,
-		uint32_t num, int level, bool expect_failure)
+static void kvm_inject_call(kvm_inject_cmd cmd, u32 first_intid,
+			    u32 num, int level, bool expect_failure)
 {
 	struct kvm_inject_args args = {
 		.cmd = cmd,
@@ -203,7 +203,7 @@ static void kvm_inject_call(kvm_inject_cmd cmd, uint32_t first_intid,
 
 #define GUEST_ASSERT_IAR_EMPTY()						\
 do { 										\
-	uint32_t _intid;							\
+	u32 _intid;							\
 	_intid = gic_get_and_ack_irq();						\
 	GUEST_ASSERT(_intid == 0 || _intid == IAR_SPURIOUS);			\
 } while (0)
@@ -236,13 +236,13 @@ static void reset_priorities(struct test_args *args)
 		gic_set_priority(i, IRQ_DEFAULT_PRIO_REG);
 }
 
-static void guest_set_irq_line(uint32_t intid, uint32_t level)
+static void guest_set_irq_line(u32 intid, u32 level)
 {
 	kvm_inject_call(KVM_SET_IRQ_LINE, intid, 1, level, false);
 }
 
 static void test_inject_fail(struct test_args *args,
-		uint32_t intid, kvm_inject_cmd cmd)
+		u32 intid, kvm_inject_cmd cmd)
 {
 	reset_stats();
 
@@ -254,10 +254,10 @@ static void test_inject_fail(struct test_args *args,
 }
 
 static void guest_inject(struct test_args *args,
-		uint32_t first_intid, uint32_t num,
+		u32 first_intid, u32 num,
 		kvm_inject_cmd cmd)
 {
-	uint32_t i;
+	u32 i;
 
 	reset_stats();
 
@@ -291,10 +291,10 @@ static void guest_inject(struct test_args *args,
  * deactivated yet.
  */
 static void guest_restore_active(struct test_args *args,
-		uint32_t first_intid, uint32_t num,
+		u32 first_intid, u32 num,
 		kvm_inject_cmd cmd)
 {
-	uint32_t prio, intid, ap1r;
+	u32 prio, intid, ap1r;
 	int i;
 
 	/*
@@ -341,9 +341,9 @@ static void guest_restore_active(struct test_args *args,
  * This function should only be used in test_inject_preemption (with IRQs
  * masked).
  */
-static uint32_t wait_for_and_activate_irq(void)
+static u32 wait_for_and_activate_irq(void)
 {
-	uint32_t intid;
+	u32 intid;
 
 	do {
 		asm volatile("wfi" : : : "memory");
@@ -359,10 +359,10 @@ static uint32_t wait_for_and_activate_irq(void)
  * interrupts for the whole test.
  */
 static void test_inject_preemption(struct test_args *args,
-		uint32_t first_intid, int num,
+		u32 first_intid, int num,
 		kvm_inject_cmd cmd)
 {
-	uint32_t intid, prio, step = KVM_PRIO_STEPS;
+	u32 intid, prio, step = KVM_PRIO_STEPS;
 	int i;
 
 	/* Set the priorities of the first (KVM_NUM_PRIOS - 1) IRQs
@@ -377,7 +377,7 @@ static void test_inject_preemption(struct test_args *args,
 	local_irq_disable();
 
 	for (i = 0; i < num; i++) {
-		uint32_t tmp;
+		u32 tmp;
 		intid = i + first_intid;
 		KVM_INJECT(cmd, intid);
 		/* Each successive IRQ will preempt the previous one. */
@@ -407,7 +407,7 @@ static void test_inject_preemption(struct test_args *args,
 
 static void test_injection(struct test_args *args, struct kvm_inject_desc *f)
 {
-	uint32_t nr_irqs = args->nr_irqs;
+	u32 nr_irqs = args->nr_irqs;
 
 	if (f->sgi) {
 		guest_inject(args, MIN_SGI, 1, f->cmd);
@@ -427,7 +427,7 @@ static void test_injection(struct test_args *args, struct kvm_inject_desc *f)
 static void test_injection_failure(struct test_args *args,
 		struct kvm_inject_desc *f)
 {
-	uint32_t bad_intid[] = { args->nr_irqs, 1020, 1024, 1120, 5120, ~0U, };
+	u32 bad_intid[] = { args->nr_irqs, 1020, 1024, 1120, 5120, ~0U, };
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(bad_intid); i++)
@@ -467,7 +467,7 @@ static void test_restore_active(struct test_args *args, struct kvm_inject_desc *
 
 static void guest_code(struct test_args *args)
 {
-	uint32_t i, nr_irqs = args->nr_irqs;
+	u32 i, nr_irqs = args->nr_irqs;
 	bool level_sensitive = args->level_sensitive;
 	struct kvm_inject_desc *f, *inject_fns;
 
@@ -506,8 +506,8 @@ static void guest_code(struct test_args *args)
 	GUEST_DONE();
 }
 
-static void kvm_irq_line_check(struct kvm_vm *vm, uint32_t intid, int level,
-			struct test_args *test_args, bool expect_failure)
+static void kvm_irq_line_check(struct kvm_vm *vm, u32 intid, int level,
+			       struct test_args *test_args, bool expect_failure)
 {
 	int ret;
 
@@ -525,8 +525,8 @@ static void kvm_irq_line_check(struct kvm_vm *vm, uint32_t intid, int level,
 	}
 }
 
-void kvm_irq_set_level_info_check(int gic_fd, uint32_t intid, int level,
-			bool expect_failure)
+void kvm_irq_set_level_info_check(int gic_fd, u32 intid, int level,
+				  bool expect_failure)
 {
 	if (!expect_failure) {
 		kvm_irq_set_level_info(gic_fd, intid, level);
@@ -550,7 +550,7 @@ void kvm_irq_set_level_info_check(int gic_fd, uint32_t intid, int level,
 }
 
 static void kvm_set_gsi_routing_irqchip_check(struct kvm_vm *vm,
-		uint32_t intid, uint32_t num, uint32_t kvm_max_routes,
+		u32 intid, u32 num, u32 kvm_max_routes,
 		bool expect_failure)
 {
 	struct kvm_irq_routing *routing;
@@ -579,7 +579,7 @@ static void kvm_set_gsi_routing_irqchip_check(struct kvm_vm *vm,
 	}
 }
 
-static void kvm_irq_write_ispendr_check(int gic_fd, uint32_t intid,
+static void kvm_irq_write_ispendr_check(int gic_fd, u32 intid,
 					struct kvm_vcpu *vcpu,
 					bool expect_failure)
 {
@@ -595,7 +595,7 @@ static void kvm_irq_write_ispendr_check(int gic_fd, uint32_t intid,
 }
 
 static void kvm_routing_and_irqfd_check(struct kvm_vm *vm,
-		uint32_t intid, uint32_t num, uint32_t kvm_max_routes,
+		u32 intid, u32 num, u32 kvm_max_routes,
 		bool expect_failure)
 {
 	int fd[MAX_SPI];
@@ -656,13 +656,13 @@ static void run_guest_cmd(struct kvm_vcpu *vcpu, int gic_fd,
 			  struct test_args *test_args)
 {
 	kvm_inject_cmd cmd = inject_args->cmd;
-	uint32_t intid = inject_args->first_intid;
-	uint32_t num = inject_args->num;
+	u32 intid = inject_args->first_intid;
+	u32 num = inject_args->num;
 	int level = inject_args->level;
 	bool expect_failure = inject_args->expect_failure;
 	struct kvm_vm *vm = vcpu->vm;
 	u64 tmp;
-	uint32_t i;
+	u32 i;
 
 	/* handles the valid case: intid=0xffffffff num=1 */
 	assert(intid < UINT_MAX - num || num == 1);
@@ -728,7 +728,7 @@ static void print_args(struct test_args *args)
 			args->eoi_split);
 }
 
-static void test_vgic(uint32_t nr_irqs, bool level_sensitive, bool eoi_split)
+static void test_vgic(u32 nr_irqs, bool level_sensitive, bool eoi_split)
 {
 	struct ucall uc;
 	int gic_fd;
@@ -802,7 +802,7 @@ static void help(const char *name)
 
 int main(int argc, char **argv)
 {
-	uint32_t nr_irqs = 64;
+	u32 nr_irqs = 64;
 	bool default_args = true;
 	bool level_sensitive = false;
 	int opt;

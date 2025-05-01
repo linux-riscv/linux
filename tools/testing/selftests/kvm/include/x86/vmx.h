@@ -285,8 +285,8 @@ enum vmcs_field {
 };
 
 struct vmx_msr_entry {
-	uint32_t index;
-	uint32_t reserved;
+	u32 index;
+	u32 reserved;
 	u64 value;
 } __attribute__ ((aligned(16)));
 
@@ -490,7 +490,7 @@ static inline int vmwrite(u64 encoding, u64 value)
 	return ret;
 }
 
-static inline uint32_t vmcs_revision(void)
+static inline u32 vmcs_revision(void)
 {
 	return rdmsr(MSR_IA32_VMX_BASIC);
 }
@@ -564,12 +564,12 @@ void nested_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
 void nested_map(struct vmx_pages *vmx, struct kvm_vm *vm,
 		 u64 nested_paddr, u64 paddr, u64 size);
 void nested_map_memslot(struct vmx_pages *vmx, struct kvm_vm *vm,
-			uint32_t memslot);
+			u32 memslot);
 void nested_identity_map_1g(struct vmx_pages *vmx, struct kvm_vm *vm,
 			    u64 addr, u64 size);
 bool kvm_cpu_has_ept(void);
 void prepare_eptp(struct vmx_pages *vmx, struct kvm_vm *vm,
-		  uint32_t eptp_memslot);
+		  u32 eptp_memslot);
 void prepare_virtualize_apic_accesses(struct vmx_pages *vmx, struct kvm_vm *vm);
 
 #endif /* SELFTEST_KVM_VMX_H */

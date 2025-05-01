@@ -28,19 +28,19 @@ static const int32_t TVAL_MAX = INT32_MAX;
 static const int32_t TVAL_MIN = INT32_MIN;
 
 /* After how much time we say there is no IRQ. */
-static const uint32_t TIMEOUT_NO_IRQ_US = 50000;
+static const u32 TIMEOUT_NO_IRQ_US = 50000;
 
 /* A nice counter value to use as the starting one for most tests. */
 static const u64 DEF_CNT = (CVAL_MAX / 2);
 
 /* Number of runs. */
-static const uint32_t NR_TEST_ITERS_DEF = 5;
+static const u32 NR_TEST_ITERS_DEF = 5;
 
 /* Default wait test time in ms. */
-static const uint32_t WAIT_TEST_MS = 10;
+static const u32 WAIT_TEST_MS = 10;
 
 /* Default "long" wait test time in ms. */
-static const uint32_t LONG_WAIT_TEST_MS = 100;
+static const u32 LONG_WAIT_TEST_MS = 100;
 
 /* Shared with IRQ handler. */
 struct test_vcpu_shared_data {
@@ -114,7 +114,7 @@ enum timer_view {
 	TIMER_TVAL,
 };
 
-static void assert_irqs_handled(uint32_t n)
+static void assert_irqs_handled(u32 n)
 {
 	int h = atomic_read(&shared_data.handled);
 
@@ -146,7 +146,7 @@ static void guest_irq_handler(struct ex_regs *regs)
 	unsigned int intid = gic_get_and_ack_irq();
 	enum arch_timer timer;
 	u64 cnt, cval;
-	uint32_t ctl;
+	u32 ctl;
 	bool timer_condition, istatus;
 
 	if (intid == IAR_SPURIOUS) {
@@ -178,7 +178,7 @@ out:
 }
 
 static void set_cval_irq(enum arch_timer timer, u64 cval_cycles,
-			 uint32_t ctl)
+			 u32 ctl)
 {
 	atomic_set(&shared_data.handled, 0);
 	atomic_set(&shared_data.spurious, 0);
@@ -187,7 +187,7 @@ static void set_cval_irq(enum arch_timer timer, u64 cval_cycles,
 }
 
 static void set_tval_irq(enum arch_timer timer, u64 tval_cycles,
-			 uint32_t ctl)
+			 u32 ctl)
 {
 	atomic_set(&shared_data.handled, 0);
 	atomic_set(&shared_data.spurious, 0);
@@ -195,7 +195,7 @@ static void set_tval_irq(enum arch_timer timer, u64 tval_cycles,
 	timer_set_tval(timer, tval_cycles);
 }
 
-static void set_xval_irq(enum arch_timer timer, u64 xval, uint32_t ctl,
+static void set_xval_irq(enum arch_timer timer, u64 xval, u32 ctl,
 			 enum timer_view tv)
 {
 	switch (tv) {
@@ -848,11 +848,11 @@ static void guest_code(enum arch_timer timer)
 	GUEST_DONE();
 }
 
-static uint32_t next_pcpu(void)
+static u32 next_pcpu(void)
 {
-	uint32_t max = get_nprocs();
-	uint32_t cur = sched_getcpu();
-	uint32_t next = cur;
+	u32 max = get_nprocs();
+	u32 cur = sched_getcpu();
+	u32 next = cur;
 	cpu_set_t cpuset;
 
 	TEST_ASSERT(max > 1, "Need at least two physical cpus");
@@ -866,7 +866,7 @@ static uint32_t next_pcpu(void)
 	return next;
 }
 
-static void migrate_self(uint32_t new_pcpu)
+static void migrate_self(u32 new_pcpu)
 {
 	int ret;
 	cpu_set_t cpuset;

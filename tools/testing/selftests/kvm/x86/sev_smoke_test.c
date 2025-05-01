@@ -62,7 +62,7 @@ static void compare_xsave(u8 *from_host, u8 *from_guest)
 		abort();
 }
 
-static void test_sync_vmsa(uint32_t policy)
+static void test_sync_vmsa(u32 policy)
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
@@ -114,7 +114,7 @@ static void test_sev(void *guest_code, u64 policy)
 	struct kvm_vm *vm;
 	struct ucall uc;
 
-	uint32_t type = policy & SEV_POLICY_ES ? KVM_X86_SEV_ES_VM : KVM_X86_SEV_VM;
+	u32 type = policy & SEV_POLICY_ES ? KVM_X86_SEV_ES_VM : KVM_X86_SEV_VM;
 
 	vm = vm_sev_create_with_one_vcpu(type, guest_code, &vcpu);
 
@@ -166,7 +166,7 @@ static void test_sev_es_shutdown(void)
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
 
-	uint32_t type = KVM_X86_SEV_ES_VM;
+	u32 type = KVM_X86_SEV_ES_VM;
 
 	vm = vm_sev_create_with_one_vcpu(type, guest_shutdown_code, &vcpu);
 
