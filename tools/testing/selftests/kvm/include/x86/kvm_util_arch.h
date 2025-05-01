@@ -11,9 +11,9 @@
 extern bool is_forced_emulation_enabled;
 
 struct kvm_vm_arch {
-	vm_vaddr_t gdt;
-	vm_vaddr_t tss;
-	vm_vaddr_t idt;
+	gva_t gdt;
+	gva_t tss;
+	gva_t idt;
 
 	uint64_t c_bit;
 	uint64_t s_bit;

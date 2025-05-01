@@ -81,7 +81,7 @@ void memstress_setup_nested(struct kvm_vm *vm, int nr_vcpus, struct kvm_vcpu *vc
 {
 	struct vmx_pages *vmx, *vmx0 = NULL;
 	struct kvm_regs regs;
-	vm_vaddr_t vmx_gva;
+	gva_t vmx_gva;
 	int vcpu_id;
 
 	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_VMX));

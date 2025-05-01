@@ -119,7 +119,7 @@ static void report(int64_t val)
 
 int main(int argc, char *argv[])
 {
-	vm_vaddr_t vmx_pages_gva;
+	gva_t vmx_pages_gva;
 	struct kvm_vcpu *vcpu;
 
 	TEST_REQUIRE(kvm_cpu_has(X86_FEATURE_VMX));

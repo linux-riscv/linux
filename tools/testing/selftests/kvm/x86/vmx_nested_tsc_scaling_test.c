@@ -120,7 +120,7 @@ int main(int argc, char *argv[])
 {
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;
-	vm_vaddr_t vmx_pages_gva;
+	gva_t vmx_pages_gva;
 
 	uint64_t tsc_start, tsc_end;
 	uint64_t tsc_khz;
