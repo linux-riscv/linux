@@ -10,7 +10,7 @@
 #include "kvm_util.h"
 #include "pmu.h"
 
-const uint64_t intel_pmu_arch_events[] = {
+const u64 intel_pmu_arch_events[] = {
 	INTEL_ARCH_CPU_CYCLES,
 	INTEL_ARCH_INSTRUCTIONS_RETIRED,
 	INTEL_ARCH_REFERENCE_CYCLES,
@@ -22,7 +22,7 @@ const uint64_t intel_pmu_arch_events[] = {
 };
 kvm_static_assert(ARRAY_SIZE(intel_pmu_arch_events) == NR_INTEL_ARCH_EVENTS);
 
-const uint64_t amd_pmu_zen_events[] = {
+const u64 amd_pmu_zen_events[] = {
 	AMD_ZEN_CORE_CYCLES,
 	AMD_ZEN_INSTRUCTIONS_RETIRED,
 	AMD_ZEN_BRANCHES_RETIRED,

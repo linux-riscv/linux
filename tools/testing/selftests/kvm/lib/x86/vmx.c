@@ -20,27 +20,27 @@ struct hv_enlightened_vmcs *current_evmcs;
 struct hv_vp_assist_page *current_vp_assist;
 
 struct eptPageTableEntry {
-	uint64_t readable:1;
-	uint64_t writable:1;
-	uint64_t executable:1;
-	uint64_t memory_type:3;
-	uint64_t ignore_pat:1;
-	uint64_t page_size:1;
-	uint64_t accessed:1;
-	uint64_t dirty:1;
-	uint64_t ignored_11_10:2;
-	uint64_t address:40;
-	uint64_t ignored_62_52:11;
-	uint64_t suppress_ve:1;
+	u64 readable:1;
+	u64 writable:1;
+	u64 executable:1;
+	u64 memory_type:3;
+	u64 ignore_pat:1;
+	u64 page_size:1;
+	u64 accessed:1;
+	u64 dirty:1;
+	u64 ignored_11_10:2;
+	u64 address:40;
+	u64 ignored_62_52:11;
+	u64 suppress_ve:1;
 };
 
 struct eptPageTablePointer {
-	uint64_t memory_type:3;
-	uint64_t page_walk_length:3;
-	uint64_t ad_enabled:1;
-	uint64_t reserved_11_07:5;
-	uint64_t address:40;
-	uint64_t reserved_63_52:12;
+	u64 memory_type:3;
+	u64 page_walk_length:3;
+	u64 ad_enabled:1;
+	u64 reserved_11_07:5;
+	u64 address:40;
+	u64 reserved_63_52:12;
 };
 int vcpu_enable_evmcs(struct kvm_vcpu *vcpu)
 {
@@ -113,8 +113,8 @@ vcpu_alloc_vmx(struct kvm_vm *vm, gva_t *p_vmx_gva)
 
 bool prepare_for_vmx_operation(struct vmx_pages *vmx)
 {
-	uint64_t feature_control;
-	uint64_t required;
+	u64 feature_control;
+	u64 required;
 	unsigned long cr0;
 	unsigned long cr4;
 
@@ -173,7 +173,7 @@ bool load_vmcs(struct vmx_pages *vmx)
 	return true;
 }
 
-static bool ept_vpid_cap_supported(uint64_t mask)
+static bool ept_vpid_cap_supported(u64 mask)
 {
 	return rdmsr(MSR_IA32_VMX_EPT_VPID_CAP) & mask;
 }
@@ -196,7 +196,7 @@ static inline void init_vmcs_control_fields(struct vmx_pages *vmx)
 	vmwrite(PIN_BASED_VM_EXEC_CONTROL, rdmsr(MSR_IA32_VMX_TRUE_PINBASED_CTLS));
 
 	if (vmx->eptp_gpa) {
-		uint64_t ept_paddr;
+		u64 ept_paddr;
 		struct eptPageTablePointer eptp = {
 			.memory_type = X86_MEMTYPE_WB,
 			.page_walk_length = 3, /* + 1 */
@@ -347,8 +347,8 @@ static inline void init_vmcs_guest_state(void *rip, void *rsp)
 	vmwrite(GUEST_GDTR_BASE, vmreadz(HOST_GDTR_BASE));
 	vmwrite(GUEST_IDTR_BASE, vmreadz(HOST_IDTR_BASE));
 	vmwrite(GUEST_DR7, 0x400);
-	vmwrite(GUEST_RSP, (uint64_t)rsp);
-	vmwrite(GUEST_RIP, (uint64_t)rip);
+	vmwrite(GUEST_RSP, (u64)rsp);
+	vmwrite(GUEST_RIP, (u64)rip);
 	vmwrite(GUEST_RFLAGS, 2);
 	vmwrite(GUEST_PENDING_DBG_EXCEPTIONS, 0);
 	vmwrite(GUEST_SYSENTER_ESP, vmreadz(HOST_IA32_SYSENTER_ESP));
@@ -364,8 +364,8 @@ void prepare_vmcs(struct vmx_pages *vmx, void *guest_rip, void *guest_rsp)
 
 static void nested_create_pte(struct kvm_vm *vm,
 			      struct eptPageTableEntry *pte,
-			      uint64_t nested_paddr,
-			      uint64_t paddr,
+			      u64 nested_paddr,
+			      u64 paddr,
 			      int current_level,
 			      int target_level)
 {
@@ -395,9 +395,9 @@ static void nested_create_pte(struct kvm_vm *vm,
 
 
 void __nested_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
-		     uint64_t nested_paddr, uint64_t paddr, int target_level)
+		     u64 nested_paddr, u64 paddr, int target_level)
 {
-	const uint64_t page_size = PG_LEVEL_SIZE(target_level);
+	const u64 page_size = PG_LEVEL_SIZE(target_level);
 	struct eptPageTableEntry *pt = vmx->eptp_hva, *pte;
 	uint16_t index;
 
@@ -446,7 +446,7 @@ void __nested_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
 }
 
 void nested_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
-		   uint64_t nested_paddr, uint64_t paddr)
+		   u64 nested_paddr, u64 paddr)
 {
 	__nested_pg_map(vmx, vm, nested_paddr, paddr, PG_LEVEL_4K);
 }
@@ -469,7 +469,7 @@ void nested_pg_map(struct vmx_pages *vmx, struct kvm_vm *vm,
  * page range starting at nested_paddr to the page range starting at paddr.
  */
 void __nested_map(struct vmx_pages *vmx, struct kvm_vm *vm,
-		  uint64_t nested_paddr, uint64_t paddr, uint64_t size,
+		  u64 nested_paddr, u64 paddr, u64 size,
 		  int level)
 {
 	size_t page_size = PG_LEVEL_SIZE(level);
@@ -486,7 +486,7 @@ void __nested_map(struct vmx_pages *vmx, struct kvm_vm *vm,
 }
 
 void nested_map(struct vmx_pages *vmx, struct kvm_vm *vm,
-		uint64_t nested_paddr, uint64_t paddr, uint64_t size)
+		u64 nested_paddr, u64 paddr, u64 size)
 {
 	__nested_map(vmx, vm, nested_paddr, paddr, size, PG_LEVEL_4K);
 }
@@ -509,22 +509,22 @@ void nested_map_memslot(struct vmx_pages *vmx, struct kvm_vm *vm,
 			break;
 
 		nested_map(vmx, vm,
-			   (uint64_t)i << vm->page_shift,
-			   (uint64_t)i << vm->page_shift,
+			   (u64)i << vm->page_shift,
+			   (u64)i << vm->page_shift,
 			   1 << vm->page_shift);
 	}
 }
 
 /* Identity map a region with 1GiB Pages. */
 void nested_identity_map_1g(struct vmx_pages *vmx, struct kvm_vm *vm,
-			    uint64_t addr, uint64_t size)
+			    u64 addr, u64 size)
 {
 	__nested_map(vmx, vm, addr, addr, size, PG_LEVEL_1G);
 }
 
 bool kvm_cpu_has_ept(void)
 {
-	uint64_t ctrl;
+	u64 ctrl;
 
 	ctrl = kvm_get_feature_msr(MSR_IA32_VMX_TRUE_PROCBASED_CTLS) >> 32;
 	if (!(ctrl & CPU_BASED_ACTIVATE_SECONDARY_CONTROLS))

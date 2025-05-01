@@ -15,8 +15,8 @@ struct kvm_vm_arch {
 	gva_t tss;
 	gva_t idt;
 
-	uint64_t c_bit;
-	uint64_t s_bit;
+	u64 c_bit;
+	u64 s_bit;
 	int sev_fd;
 	bool is_pt_protected;
 };
@@ -40,7 +40,7 @@ do {											\
 				     : "+m" (mem)					\
 				     : "r" (val) : "memory");				\
 	} else {									\
-		uint64_t __old = READ_ONCE(mem);					\
+		u64 __old = READ_ONCE(mem);					\
 											\
 		__asm__ __volatile__(KVM_FEP LOCK_PREFIX "cmpxchg %[new], %[ptr]"	\
 				     : [ptr] "+m" (mem), [old] "+a" (__old)		\

@@ -27,8 +27,8 @@ static void encrypt_region(struct kvm_vm *vm, struct userspace_mem_region *regio
 	sev_register_encrypted_memory(vm, region);
 
 	sparsebit_for_each_set_range(protected_phy_pages, i, j) {
-		const uint64_t size = (j - i + 1) * vm->page_size;
-		const uint64_t offset = (i - lowest_page_in_region) * vm->page_size;
+		const u64 size = (j - i + 1) * vm->page_size;
+		const u64 offset = (i - lowest_page_in_region) * vm->page_size;
 
 		sev_launch_update_data(vm, gpa_base + offset, size);
 	}

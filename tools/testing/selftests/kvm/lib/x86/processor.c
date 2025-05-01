@@ -21,7 +21,7 @@ gva_t exception_handlers;
 bool host_cpu_is_amd;
 bool host_cpu_is_intel;
 bool is_forced_emulation_enabled;
-uint64_t guest_tsc_khz;
+u64 guest_tsc_khz;
 
 static void regs_dump(FILE *stream, struct kvm_regs *regs, uint8_t indent)
 {
@@ -134,11 +134,11 @@ void virt_arch_pgd_alloc(struct kvm_vm *vm)
 	}
 }
 
-static void *virt_get_pte(struct kvm_vm *vm, uint64_t *parent_pte,
-			  uint64_t vaddr, int level)
+static void *virt_get_pte(struct kvm_vm *vm, u64 *parent_pte,
+			  u64 vaddr, int level)
 {
-	uint64_t pt_gpa = PTE_GET_PA(*parent_pte);
-	uint64_t *page_table = addr_gpa2hva(vm, pt_gpa);
+	u64 pt_gpa = PTE_GET_PA(*parent_pte);
+	u64 *page_table = addr_gpa2hva(vm, pt_gpa);
 	int index = (vaddr >> PG_LEVEL_SHIFT(level)) & 0x1ffu;
 
 	TEST_ASSERT((*parent_pte & PTE_PRESENT_MASK) || parent_pte == &vm->pgd,
@@ -148,14 +148,14 @@ static void *virt_get_pte(struct kvm_vm *vm, uint64_t *parent_pte,
 	return &page_table[index];
 }
 
-static uint64_t *virt_create_upper_pte(struct kvm_vm *vm,
-				       uint64_t *parent_pte,
-				       uint64_t vaddr,
-				       uint64_t paddr,
-				       int current_level,
-				       int target_level)
+static u64 *virt_create_upper_pte(struct kvm_vm *vm,
+				  u64 *parent_pte,
+				  u64 vaddr,
+				  u64 paddr,
+				  int current_level,
+				  int target_level)
 {
-	uint64_t *pte = virt_get_pte(vm, parent_pte, vaddr, current_level);
+	u64 *pte = virt_get_pte(vm, parent_pte, vaddr, current_level);
 
 	paddr = vm_untag_gpa(vm, paddr);
 
@@ -181,11 +181,11 @@ static uint64_t *virt_create_upper_pte(struct kvm_vm *vm,
 	return pte;
 }
 
-void __virt_pg_map(struct kvm_vm *vm, uint64_t vaddr, uint64_t paddr, int level)
+void __virt_pg_map(struct kvm_vm *vm, u64 vaddr, u64 paddr, int level)
 {
-	const uint64_t pg_size = PG_LEVEL_SIZE(level);
-	uint64_t *pml4e, *pdpe, *pde;
-	uint64_t *pte;
+	const u64 pg_size = PG_LEVEL_SIZE(level);
+	u64 *pml4e, *pdpe, *pde;
+	u64 *pte;
 
 	TEST_ASSERT(vm->mode == VM_MODE_PXXV48_4K,
 		    "Unknown or unsupported guest mode, mode: 0x%x", vm->mode);
@@ -237,16 +237,16 @@ void __virt_pg_map(struct kvm_vm *vm, uint64_t vaddr, uint64_t paddr, int level)
 		*pte |= vm->arch.s_bit;
 }
 
-void virt_arch_pg_map(struct kvm_vm *vm, uint64_t vaddr, uint64_t paddr)
+void virt_arch_pg_map(struct kvm_vm *vm, u64 vaddr, u64 paddr)
 {
 	__virt_pg_map(vm, vaddr, paddr, PG_LEVEL_4K);
 }
 
-void virt_map_level(struct kvm_vm *vm, uint64_t vaddr, uint64_t paddr,
-		    uint64_t nr_bytes, int level)
+void virt_map_level(struct kvm_vm *vm, u64 vaddr, u64 paddr,
+		    u64 nr_bytes, int level)
 {
-	uint64_t pg_size = PG_LEVEL_SIZE(level);
-	uint64_t nr_pages = nr_bytes / pg_size;
+	u64 pg_size = PG_LEVEL_SIZE(level);
+	u64 nr_pages = nr_bytes / pg_size;
 	int i;
 
 	TEST_ASSERT(nr_bytes % pg_size == 0,
@@ -261,7 +261,7 @@ void virt_map_level(struct kvm_vm *vm, uint64_t vaddr, uint64_t paddr,
 	}
 }
 
-static bool vm_is_target_pte(uint64_t *pte, int *level, int current_level)
+static bool vm_is_target_pte(u64 *pte, int *level, int current_level)
 {
 	if (*pte & PTE_LARGE_MASK) {
 		TEST_ASSERT(*level == PG_LEVEL_NONE ||
@@ -273,10 +273,9 @@ static bool vm_is_target_pte(uint64_t *pte, int *level, int current_level)
 	return *level == current_level;
 }
 
-uint64_t *__vm_get_page_table_entry(struct kvm_vm *vm, uint64_t vaddr,
-				    int *level)
+u64 *__vm_get_page_table_entry(struct kvm_vm *vm, u64 vaddr, int *level)
 {
-	uint64_t *pml4e, *pdpe, *pde;
+	u64 *pml4e, *pdpe, *pde;
 
 	TEST_ASSERT(!vm->arch.is_pt_protected,
 		    "Walking page tables of protected guests is impossible");
@@ -312,7 +311,7 @@ uint64_t *__vm_get_page_table_entry(struct kvm_vm *vm, uint64_t vaddr,
 	return virt_get_pte(vm, pde, vaddr, PG_LEVEL_4K);
 }
 
-uint64_t *vm_get_page_table_entry(struct kvm_vm *vm, uint64_t vaddr)
+u64 *vm_get_page_table_entry(struct kvm_vm *vm, u64 vaddr)
 {
 	int level = PG_LEVEL_4K;
 
@@ -321,10 +320,10 @@ uint64_t *vm_get_page_table_entry(struct kvm_vm *vm, uint64_t vaddr)
 
 void virt_arch_dump(FILE *stream, struct kvm_vm *vm, uint8_t indent)
 {
-	uint64_t *pml4e, *pml4e_start;
-	uint64_t *pdpe, *pdpe_start;
-	uint64_t *pde, *pde_start;
-	uint64_t *pte, *pte_start;
+	u64 *pml4e, *pml4e_start;
+	u64 *pdpe, *pdpe_start;
+	u64 *pde, *pde_start;
+	u64 *pte, *pte_start;
 
 	if (!vm->pgd_created)
 		return;
@@ -334,7 +333,7 @@ void virt_arch_dump(FILE *stream, struct kvm_vm *vm, uint8_t indent)
 	fprintf(stream, "%*s      index hvaddr         gpaddr         "
 		"addr         w exec dirty\n",
 		indent, "");
-	pml4e_start = (uint64_t *) addr_gpa2hva(vm, vm->pgd);
+	pml4e_start = addr_gpa2hva(vm, vm->pgd);
 	for (uint16_t n1 = 0; n1 <= 0x1ffu; n1++) {
 		pml4e = &pml4e_start[n1];
 		if (!(*pml4e & PTE_PRESENT_MASK))
@@ -386,10 +385,10 @@ void virt_arch_dump(FILE *stream, struct kvm_vm *vm, uint8_t indent)
 						!!(*pte & PTE_WRITABLE_MASK),
 						!!(*pte & PTE_NX_MASK),
 						!!(*pte & PTE_DIRTY_MASK),
-						((uint64_t) n1 << 27)
-							| ((uint64_t) n2 << 18)
-							| ((uint64_t) n3 << 9)
-							| ((uint64_t) n4));
+						((u64)n1 << 27)
+							| ((u64)n2 << 18)
+							| ((u64)n3 << 9)
+							| ((u64)n4));
 				}
 			}
 		}
@@ -466,7 +465,7 @@ static void kvm_seg_set_kernel_data_64bit(struct kvm_segment *segp)
 gpa_t addr_arch_gva2gpa(struct kvm_vm *vm, gva_t gva)
 {
 	int level = PG_LEVEL_NONE;
-	uint64_t *pte = __vm_get_page_table_entry(vm, gva, &level);
+	u64 *pte = __vm_get_page_table_entry(vm, gva, &level);
 
 	TEST_ASSERT(*pte & PTE_PRESENT_MASK,
 		    "Leaf PTE not PRESENT for gva: 0x%08lx", gva);
@@ -782,7 +781,7 @@ uint32_t kvm_cpuid_property(const struct kvm_cpuid2 *cpuid,
 			     property.reg, property.lo_bit, property.hi_bit);
 }
 
-uint64_t kvm_get_feature_msr(uint64_t msr_index)
+u64 kvm_get_feature_msr(u64 msr_index)
 {
 	struct {
 		struct kvm_msrs header;
@@ -801,7 +800,7 @@ uint64_t kvm_get_feature_msr(uint64_t msr_index)
 	return buffer.entry.data;
 }
 
-void __vm_xsave_require_permission(uint64_t xfeature, const char *name)
+void __vm_xsave_require_permission(u64 xfeature, const char *name)
 {
 	int kvm_fd;
 	u64 bitmask;
@@ -902,7 +901,7 @@ void vcpu_set_or_clear_cpuid_feature(struct kvm_vcpu *vcpu,
 	vcpu_set_cpuid(vcpu);
 }
 
-uint64_t vcpu_get_msr(struct kvm_vcpu *vcpu, uint64_t msr_index)
+u64 vcpu_get_msr(struct kvm_vcpu *vcpu, u64 msr_index)
 {
 	struct {
 		struct kvm_msrs header;
@@ -917,7 +916,7 @@ uint64_t vcpu_get_msr(struct kvm_vcpu *vcpu, uint64_t msr_index)
 	return buffer.entry.data;
 }
 
-int _vcpu_set_msr(struct kvm_vcpu *vcpu, uint64_t msr_index, uint64_t msr_value)
+int _vcpu_set_msr(struct kvm_vcpu *vcpu, u64 msr_index, u64 msr_value)
 {
 	struct {
 		struct kvm_msrs header;
@@ -945,22 +944,22 @@ void vcpu_args_set(struct kvm_vcpu *vcpu, unsigned int num, ...)
 	vcpu_regs_get(vcpu, &regs);
 
 	if (num >= 1)
-		regs.rdi = va_arg(ap, uint64_t);
+		regs.rdi = va_arg(ap, u64);
 
 	if (num >= 2)
-		regs.rsi = va_arg(ap, uint64_t);
+		regs.rsi = va_arg(ap, u64);
 
 	if (num >= 3)
-		regs.rdx = va_arg(ap, uint64_t);
+		regs.rdx = va_arg(ap, u64);
 
 	if (num >= 4)
-		regs.rcx = va_arg(ap, uint64_t);
+		regs.rcx = va_arg(ap, u64);
 
 	if (num >= 5)
-		regs.r8 = va_arg(ap, uint64_t);
+		regs.r8 = va_arg(ap, u64);
 
 	if (num >= 6)
-		regs.r9 = va_arg(ap, uint64_t);
+		regs.r9 = va_arg(ap, u64);
 
 	vcpu_regs_set(vcpu, &regs);
 	va_end(ap);
@@ -1183,7 +1182,7 @@ const struct kvm_cpuid_entry2 *get_cpuid_entry(const struct kvm_cpuid2 *cpuid,
 
 #define X86_HYPERCALL(inputs...)					\
 ({									\
-	uint64_t r;							\
+	u64 r;							\
 									\
 	asm volatile("test %[use_vmmcall], %[use_vmmcall]\n\t"		\
 		     "jnz 1f\n\t"					\
@@ -1197,18 +1196,17 @@ const struct kvm_cpuid_entry2 *get_cpuid_entry(const struct kvm_cpuid2 *cpuid,
 	r;								\
 })
 
-uint64_t kvm_hypercall(uint64_t nr, uint64_t a0, uint64_t a1, uint64_t a2,
-		       uint64_t a3)
+u64 kvm_hypercall(u64 nr, u64 a0, u64 a1, u64 a2, u64 a3)
 {
 	return X86_HYPERCALL("a"(nr), "b"(a0), "c"(a1), "d"(a2), "S"(a3));
 }
 
-uint64_t __xen_hypercall(uint64_t nr, uint64_t a0, void *a1)
+u64 __xen_hypercall(u64 nr, u64 a0, void *a1)
 {
 	return X86_HYPERCALL("a"(nr), "D"(a0), "S"(a1));
 }
 
-void xen_hypercall(uint64_t nr, uint64_t a0, void *a1)
+void xen_hypercall(u64 nr, u64 a0, void *a1)
 {
 	GUEST_ASSERT(!__xen_hypercall(nr, a0, a1));
 }

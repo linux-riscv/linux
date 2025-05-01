@@ -33,7 +33,7 @@
 int vgic_v3_setup(struct kvm_vm *vm, unsigned int nr_vcpus, uint32_t nr_irqs)
 {
 	int gic_fd;
-	uint64_t attr;
+	u64 attr;
 	struct list_head *iter;
 	unsigned int nr_gic_pages, nr_vcpus_created = 0;
 
@@ -82,9 +82,9 @@ int vgic_v3_setup(struct kvm_vm *vm, unsigned int nr_vcpus, uint32_t nr_irqs)
 /* should only work for level sensitive interrupts */
 int _kvm_irq_set_level_info(int gic_fd, uint32_t intid, int level)
 {
-	uint64_t attr = 32 * (intid / 32);
-	uint64_t index = intid % 32;
-	uint64_t val;
+	u64 attr = 32 * (intid / 32);
+	u64 index = intid % 32;
+	u64 val;
 	int ret;
 
 	ret = __kvm_device_attr_get(gic_fd, KVM_DEV_ARM_VGIC_GRP_LEVEL_INFO,
@@ -128,12 +128,12 @@ void kvm_arm_irq_line(struct kvm_vm *vm, uint32_t intid, int level)
 }
 
 static void vgic_poke_irq(int gic_fd, uint32_t intid, struct kvm_vcpu *vcpu,
-			  uint64_t reg_off)
+			  u64 reg_off)
 {
-	uint64_t reg = intid / 32;
-	uint64_t index = intid % 32;
-	uint64_t attr = reg_off + reg * 4;
-	uint64_t val;
+	u64 reg = intid / 32;
+	u64 index = intid % 32;
+	u64 attr = reg_off + reg * 4;
+	u64 val;
 	bool intid_is_private = INTID_IS_SGI(intid) || INTID_IS_PPI(intid);
 
 	uint32_t group = intid_is_private ? KVM_DEV_ARM_VGIC_GRP_REDIST_REGS

@@ -16,7 +16,7 @@
 
 #define NR_VCPUS		4
 
-#define REG_OFFSET(vcpu, offset) (((uint64_t)vcpu << 32) | offset)
+#define REG_OFFSET(vcpu, offset) (((u64)(vcpu) << 32) | (offset))
 
 #define GICR_TYPER 0x8
 
@@ -29,7 +29,7 @@ struct vm_gic {
 	uint32_t gic_dev_type;
 };
 
-static uint64_t max_phys_size;
+static u64 max_phys_size;
 
 /*
  * Helpers to access a redistributor register and verify the ioctl() failed or
@@ -102,9 +102,9 @@ static void vm_gic_destroy(struct vm_gic *v)
 }
 
 struct vgic_region_attr {
-	uint64_t attr;
-	uint64_t size;
-	uint64_t alignment;
+	u64 attr;
+	u64 size;
+	u64 alignment;
 };
 
 struct vgic_region_attr gic_v3_dist_region = {
@@ -142,7 +142,7 @@ struct vgic_region_attr gic_v2_cpu_region = {
 static void subtest_dist_rdist(struct vm_gic *v)
 {
 	int ret;
-	uint64_t addr;
+	u64 addr;
 	struct vgic_region_attr rdist; /* CPU interface in GICv2*/
 	struct vgic_region_attr dist;
 
@@ -222,7 +222,7 @@ static void subtest_dist_rdist(struct vm_gic *v)
 /* Test the new REDIST region API */
 static void subtest_v3_redist_regions(struct vm_gic *v)
 {
-	uint64_t addr, expected_addr;
+	u64 addr, expected_addr;
 	int ret;
 
 	ret = __kvm_has_device_attr(v->gic_fd, KVM_DEV_ARM_VGIC_GRP_ADDR,
@@ -407,7 +407,7 @@ static void test_v3_new_redist_regions(void)
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	void *dummy = NULL;
 	struct vm_gic v;
-	uint64_t addr;
+	u64 addr;
 	int ret;
 
 	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);
@@ -459,7 +459,7 @@ static void test_v3_new_redist_regions(void)
 static void test_v3_typer_accesses(void)
 {
 	struct vm_gic v;
-	uint64_t addr;
+	u64 addr;
 	int ret, i;
 
 	v.vm = vm_create(NR_VCPUS);
@@ -545,7 +545,7 @@ static void test_v3_last_bit_redist_regions(void)
 {
 	uint32_t vcpuids[] = { 0, 3, 5, 4, 1, 2 };
 	struct vm_gic v;
-	uint64_t addr;
+	u64 addr;
 
 	v = vm_gic_v3_create_with_vcpuids(ARRAY_SIZE(vcpuids), vcpuids);
 
@@ -579,7 +579,7 @@ static void test_v3_last_bit_single_rdist(void)
 {
 	uint32_t vcpuids[] = { 0, 3, 5, 4, 1, 2 };
 	struct vm_gic v;
-	uint64_t addr;
+	u64 addr;
 
 	v = vm_gic_v3_create_with_vcpuids(ARRAY_SIZE(vcpuids), vcpuids);
 
@@ -605,7 +605,7 @@ static void test_v3_redist_ipa_range_check_at_vcpu_run(void)
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	struct vm_gic v;
 	int ret, i;
-	uint64_t addr;
+	u64 addr;
 
 	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, 1, vcpus);
 
@@ -637,7 +637,7 @@ static void test_v3_its_region(void)
 {
 	struct kvm_vcpu *vcpus[NR_VCPUS];
 	struct vm_gic v;
-	uint64_t addr;
+	u64 addr;
 	int its_fd, ret;
 
 	v = vm_gic_create_with_vcpus(KVM_DEV_TYPE_ARM_VGIC_V3, NR_VCPUS, vcpus);

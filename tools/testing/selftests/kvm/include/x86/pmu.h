@@ -5,7 +5,7 @@
 #ifndef SELFTEST_KVM_PMU_H
 #define SELFTEST_KVM_PMU_H
 
-#include <stdint.h>
+#include <linux/types.h>
 
 #define KVM_PMU_EVENT_FILTER_MAX_EVENTS			300
 
@@ -91,7 +91,7 @@ enum amd_pmu_zen_events {
 	NR_AMD_ZEN_EVENTS,
 };
 
-extern const uint64_t intel_pmu_arch_events[];
-extern const uint64_t amd_pmu_zen_events[];
+extern const u64 intel_pmu_arch_events[];
+extern const u64 amd_pmu_zen_events[];
 
 #endif /* SELFTEST_KVM_PMU_H */

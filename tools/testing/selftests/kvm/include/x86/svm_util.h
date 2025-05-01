@@ -16,17 +16,17 @@ struct svm_test_data {
 	/* VMCB */
 	struct vmcb *vmcb; /* gva */
 	void *vmcb_hva;
-	uint64_t vmcb_gpa;
+	u64 vmcb_gpa;
 
 	/* host state-save area */
 	struct vmcb_save_area *save_area; /* gva */
 	void *save_area_hva;
-	uint64_t save_area_gpa;
+	u64 save_area_gpa;
 
 	/* MSR-Bitmap */
 	void *msr; /* gva */
 	void *msr_hva;
-	uint64_t msr_gpa;
+	u64 msr_gpa;
 };
 
 static inline void vmmcall(void)
@@ -55,7 +55,7 @@ static inline void vmmcall(void)
 
 struct svm_test_data *vcpu_alloc_svm(struct kvm_vm *vm, gva_t *p_svm_gva);
 void generic_svm_setup(struct svm_test_data *svm, void *guest_rip, void *guest_rsp);
-void run_guest(struct vmcb *vmcb, uint64_t vmcb_gpa);
+void run_guest(struct vmcb *vmcb, u64 vmcb_gpa);
 
 int open_sev_dev_path_or_exit(void);
 

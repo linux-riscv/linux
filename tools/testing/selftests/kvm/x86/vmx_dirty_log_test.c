@@ -82,7 +82,7 @@ static void test_vmx_dirty_log(bool enable_ept)
 	gva_t vmx_pages_gva = 0;
 	struct vmx_pages *vmx;
 	unsigned long *bmap;
-	uint64_t *host_test_mem;
+	u64 *host_test_mem;
 
 	struct kvm_vcpu *vcpu;
 	struct kvm_vm *vm;

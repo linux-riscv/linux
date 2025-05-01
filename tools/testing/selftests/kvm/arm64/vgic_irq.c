@@ -132,7 +132,7 @@ static struct kvm_inject_desc set_active_fns[] = {
 	for_each_supported_inject_fn((args), (t), (f))
 
 /* Shared between the guest main thread and the IRQ handlers. */
-volatile uint64_t irq_handled;
+volatile u64 irq_handled;
 volatile uint32_t irqnr_received[MAX_SPI + 1];
 
 static void reset_stats(void)
@@ -144,15 +144,15 @@ static void reset_stats(void)
 		irqnr_received[i] = 0;
 }
 
-static uint64_t gic_read_ap1r0(void)
+static u64 gic_read_ap1r0(void)
 {
-	uint64_t reg = read_sysreg_s(SYS_ICC_AP1R0_EL1);
+	u64 reg = read_sysreg_s(SYS_ICC_AP1R0_EL1);
 
 	dsb(sy);
 	return reg;
 }
 
-static void gic_write_ap1r0(uint64_t val)
+static void gic_write_ap1r0(u64 val)
 {
 	write_sysreg_s(val, SYS_ICC_AP1R0_EL1);
 	isb();
@@ -555,12 +555,12 @@ static void kvm_set_gsi_routing_irqchip_check(struct kvm_vm *vm,
 {
 	struct kvm_irq_routing *routing;
 	int ret;
-	uint64_t i;
+	u64 i;
 
 	assert(num <= kvm_max_routes && kvm_max_routes <= KVM_MAX_IRQ_ROUTES);
 
 	routing = kvm_gsi_routing_create();
-	for (i = intid; i < (uint64_t)intid + num; i++)
+	for (i = intid; i < (u64)intid + num; i++)
 		kvm_gsi_routing_irqchip_add(routing, i - MIN_SPI, i - MIN_SPI);
 
 	if (!expect_failure) {
@@ -568,7 +568,7 @@ static void kvm_set_gsi_routing_irqchip_check(struct kvm_vm *vm,
 	} else {
 		ret = _kvm_gsi_routing_write(vm, routing);
 		/* The kernel only checks e->irqchip.pin >= KVM_IRQCHIP_NUM_PINS */
-		if (((uint64_t)intid + num - 1 - MIN_SPI) >= KVM_IRQCHIP_NUM_PINS)
+		if (((u64)intid + num - 1 - MIN_SPI) >= KVM_IRQCHIP_NUM_PINS)
 			TEST_ASSERT(ret != 0 && errno == EINVAL,
 				"Bad intid %u did not cause KVM_SET_GSI_ROUTING "
 				"error: rc: %i errno: %i", intid, ret, errno);
@@ -599,9 +599,9 @@ static void kvm_routing_and_irqfd_check(struct kvm_vm *vm,
 		bool expect_failure)
 {
 	int fd[MAX_SPI];
-	uint64_t val;
+	u64 val;
 	int ret, f;
-	uint64_t i;
+	u64 i;
 
 	/*
 	 * There is no way to try injecting an SGI or PPI as the interface
@@ -620,35 +620,35 @@ static void kvm_routing_and_irqfd_check(struct kvm_vm *vm,
 	 * that no actual interrupt was injected for those cases.
 	 */
 
-	for (f = 0, i = intid; i < (uint64_t)intid + num; i++, f++) {
+	for (f = 0, i = intid; i < (u64)intid + num; i++, f++) {
 		fd[f] = eventfd(0, 0);
 		TEST_ASSERT(fd[f] != -1, __KVM_SYSCALL_ERROR("eventfd()", fd[f]));
 	}
 
-	for (f = 0, i = intid; i < (uint64_t)intid + num; i++, f++) {
+	for (f = 0, i = intid; i < (u64)intid + num; i++, f++) {
 		struct kvm_irqfd irqfd = {
 			.fd  = fd[f],
 			.gsi = i - MIN_SPI,
 		};
-		assert(i <= (uint64_t)UINT_MAX);
+		assert(i <= (u64)UINT_MAX);
 		vm_ioctl(vm, KVM_IRQFD, &irqfd);
 	}
 
-	for (f = 0, i = intid; i < (uint64_t)intid + num; i++, f++) {
+	for (f = 0, i = intid; i < (u64)intid + num; i++, f++) {
 		val = 1;
-		ret = write(fd[f], &val, sizeof(uint64_t));
-		TEST_ASSERT(ret == sizeof(uint64_t),
+		ret = write(fd[f], &val, sizeof(u64));
+		TEST_ASSERT(ret == sizeof(u64),
 			    __KVM_SYSCALL_ERROR("write()", ret));
 	}
 
-	for (f = 0, i = intid; i < (uint64_t)intid + num; i++, f++)
+	for (f = 0, i = intid; i < (u64)intid + num; i++, f++)
 		close(fd[f]);
 }
 
 /* handles the valid case: intid=0xffffffff num=1 */
 #define for_each_intid(first, num, tmp, i)					\
 	for ((tmp) = (i) = (first);						\
-		(tmp) < (uint64_t)(first) + (uint64_t)(num);			\
+		(tmp) < (u64)(first) + (u64)(num);			\
 		(tmp)++, (i)++)
 
 static void run_guest_cmd(struct kvm_vcpu *vcpu, int gic_fd,
@@ -661,7 +661,7 @@ static void run_guest_cmd(struct kvm_vcpu *vcpu, int gic_fd,
 	int level = inject_args->level;
 	bool expect_failure = inject_args->expect_failure;
 	struct kvm_vm *vm = vcpu->vm;
-	uint64_t tmp;
+	u64 tmp;
 	uint32_t i;
 
 	/* handles the valid case: intid=0xffffffff num=1 */

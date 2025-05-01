@@ -15,7 +15,7 @@
 #include "processor.h"
 #include "vmx.h"
 
-void memstress_l2_guest_code(uint64_t vcpu_id)
+void memstress_l2_guest_code(u64 vcpu_id)
 {
 	memstress_guest_code(vcpu_id);
 	vmcall();
@@ -29,7 +29,7 @@ __asm__(
 "	ud2;"
 );
 
-static void memstress_l1_guest_code(struct vmx_pages *vmx, uint64_t vcpu_id)
+static void memstress_l1_guest_code(struct vmx_pages *vmx, u64 vcpu_id)
 {
 #define L2_GUEST_STACK_SIZE 64
 	unsigned long l2_guest_stack[L2_GUEST_STACK_SIZE];
@@ -49,7 +49,7 @@ static void memstress_l1_guest_code(struct vmx_pages *vmx, uint64_t vcpu_id)
 	GUEST_DONE();
 }
 
-uint64_t memstress_nested_pages(int nr_vcpus)
+u64 memstress_nested_pages(int nr_vcpus)
 {
 	/*
 	 * 513 page tables is enough to identity-map 256 TiB of L2 with 1G
@@ -61,7 +61,7 @@ uint64_t memstress_nested_pages(int nr_vcpus)
 
 void memstress_setup_ept(struct vmx_pages *vmx, struct kvm_vm *vm)
 {
-	uint64_t start, end;
+	u64 start, end;
 
 	prepare_eptp(vmx, vm, 0);
 

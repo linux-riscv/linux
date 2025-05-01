@@ -53,7 +53,7 @@ kvm_static_assert(SEV_RET_SUCCESS == 0);
 		unsigned long raw;					\
 	} sev_cmd = { .c = {						\
 		.id = (cmd),						\
-		.data = (uint64_t)(arg),				\
+		.data = (u64)(arg),				\
 		.sev_fd = (vm)->arch.sev_fd,				\
 	} };								\
 									\
@@ -83,7 +83,7 @@ static inline void sev_register_encrypted_memory(struct kvm_vm *vm,
 }
 
 static inline void sev_launch_update_data(struct kvm_vm *vm, gpa_t gpa,
-					  uint64_t size)
+					  u64 size)
 {
 	struct kvm_sev_launch_update_data update_data = {
 		.uaddr = (unsigned long)addr_gpa2hva(vm, gpa),
