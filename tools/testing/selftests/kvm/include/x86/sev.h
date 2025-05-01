@@ -82,7 +82,7 @@ static inline void sev_register_encrypted_memory(struct kvm_vm *vm,
 	vm_ioctl(vm, KVM_MEMORY_ENCRYPT_REG_REGION, &range);
 }
 
-static inline void sev_launch_update_data(struct kvm_vm *vm, vm_paddr_t gpa,
+static inline void sev_launch_update_data(struct kvm_vm *vm, gpa_t gpa,
 					  uint64_t size)
 {
 	struct kvm_sev_launch_update_data update_data = {
