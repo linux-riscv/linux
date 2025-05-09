@@ -35,6 +35,7 @@ properties:
           - enum:
               - milkv,pioneer
               - sophgo,sg2042-x8evb
+              - sophgo,sg2042-x4evb
           - const: sophgo,sg2042
 
 additionalProperties: true
