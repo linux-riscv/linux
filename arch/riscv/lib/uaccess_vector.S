@@ -34,13 +34,6 @@ loop:
 	add pDst, pDst, iVL
 	bnez iNum, loop
 
-	/* Exception fixup for vector load is shared with normal exit */
-10:
-	/* Disable access to user memory */
-	csrc	CSR_STATUS, t6
-	mv	a0, iNum
-	ret
-
 	/* Exception fixup code for vector store. */
 11:
 	/* Undo the subtraction after vle8.v */
@@ -48,5 +41,10 @@ loop:
 	/* Make sure the scalar fallback skip already processed bytes */
 	csrr	t2, CSR_VSTART
 	sub	iNum, iNum, t2
-	j	10b
-SYM_FUNC_END(__asm_vector_usercopy)
+
+	/* Exception fixup for vector load is shared with normal exit */
+10:
+	/* Disable access to user memory */
+	mv	a0, iNum
+	ret
+SYM_FUNC_END(__asm_vector_usercopy_sum_enabled)
