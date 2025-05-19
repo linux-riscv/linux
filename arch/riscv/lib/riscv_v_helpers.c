@@ -15,9 +15,9 @@
 
 #ifdef CONFIG_MMU
 size_t riscv_v_usercopy_threshold = CONFIG_RISCV_ISA_V_UCOPY_THRESHOLD;
-int __asm_vector_usercopy(void *dst, void *src, size_t n);
 int fallback_scalar_usercopy(void *dst, void *src, size_t n);
-asmlinkage int enter_vector_usercopy(void *dst, void *src, size_t n)
+asmlinkage int enter_vector_usercopy(void *dst, void *src, size_t n,
+				     int (*fn)(void *, void *, size_t))
 {
 	size_t remain, copied;
 
@@ -26,7 +26,7 @@ asmlinkage int enter_vector_usercopy(void *dst, void *src, size_t n)
 		goto fallback;
 
 	kernel_vector_begin();
-	remain = __asm_vector_usercopy(dst, src, n);
+	remain = fn(dst, src, n);
 	kernel_vector_end();
 
 	if (remain) {
