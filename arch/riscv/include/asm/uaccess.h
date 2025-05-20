@@ -295,20 +295,39 @@ do {								\
 } while (0)
 #endif /* CONFIG_64BIT */
 
+#define __put_user_8_4(x, ptr, label)			\
+do {								\
+	u32 __user *__ptr = (u32 __user *)(ptr);		\
+	u64 __x = (__typeof__((x)-(x)))(x);			\
+	asm goto(						\
+		"1:\n"						\
+		"	sw %z0, %2\n"				\
+		"2:\n"						\
+		"	sw %z1, %3\n"				\
+		_ASM_EXTABLE(1b, %l4)				\
+		_ASM_EXTABLE(2b, %l4)				\
+		: : "rJ" (__x), "rJ" (__x >> 32),		\
+			"m" (__ptr[__LSW]),			\
+			"m" (__ptr[__MSW]) : : label);		\
+} while (0)
+
 #define __put_user_nocheck(x, __gu_ptr, label)			\
 do {								\
 	switch (sizeof(*__gu_ptr)) {				\
-	case 1:							\
-		__put_user_asm("sb", (x), __gu_ptr, label);	\
-		break;						\
-	case 2:							\
-		__put_user_asm("sh", (x), __gu_ptr, label);	\
+	case 8:							\
+		if (IS_ALIGNED((unsigned long)__gu_ptr, 8))	\
+			__put_user_8((x), __gu_ptr, label);	\
+		else if (IS_ALIGNED((unsigned long)__gu_ptr, 4))\
+			__put_user_8_4((x), __gu_ptr, label);	\
 		break;						\
 	case 4:							\
 		__put_user_asm("sw", (x), __gu_ptr, label);	\
 		break;						\
-	case 8:							\
-		__put_user_8((x), __gu_ptr, label);		\
+	case 2:							\
+		__put_user_asm("sh", (x), __gu_ptr, label);	\
+		break;						\
+	case 1:							\
+		__put_user_asm("sb", (x), __gu_ptr, label);	\
 		break;						\
 	default:						\
 		BUILD_BUG();					\

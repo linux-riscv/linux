@@ -459,6 +459,8 @@ static int handle_scalar_misaligned_load(struct pt_regs *regs)
 		if (copy_from_user(&val, (u8 __user *)addr, len))
 			return -1;
 	} else {
+		if (access_ok((void *)addr, len))
+			while (1);
 		memcpy(&val, (u8 *)addr, len);
 	}
 
@@ -560,6 +562,8 @@ static int handle_scalar_misaligned_store(struct pt_regs *regs)
 		if (copy_to_user((u8 __user *)addr, &val, len))
 			return -1;
 	} else {
+		if (access_ok((void *)addr, len))
+			while (1);
 		memcpy((u8 *)addr, &val, len);
 	}
 
