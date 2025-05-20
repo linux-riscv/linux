@@ -455,7 +455,7 @@ static int handle_scalar_misaligned_load(struct pt_regs *regs)
 		return -EOPNOTSUPP;
 
 	val.data_u64 = 0;
-	if (user_mode(regs)) {
+	if (access_ok((void *)addr, len)) {
 		if (copy_from_user(&val, (u8 __user *)addr, len))
 			return -1;
 	} else {
@@ -556,7 +556,7 @@ static int handle_scalar_misaligned_store(struct pt_regs *regs)
 	if (!IS_ENABLED(CONFIG_FPU) && fp)
 		return -EOPNOTSUPP;
 
-	if (user_mode(regs)) {
+	if (access_ok((void *)addr, len)) {
 		if (copy_to_user((u8 __user *)addr, &val, len))
 			return -1;
 	} else {
