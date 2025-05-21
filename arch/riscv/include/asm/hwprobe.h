@@ -40,4 +40,8 @@ static inline bool riscv_hwprobe_pair_cmp(struct riscv_hwprobe *pair,
 	return pair->value == other_pair->value;
 }
 
+#ifdef CONFIG_MMU
+void riscv_hwprobe_vdso_sync(s64 sync_key);
+#endif /* CONFIG_MMU */
+
 #endif
