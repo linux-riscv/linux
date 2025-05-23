@@ -14,7 +14,11 @@ allOf:
 
 properties:
   compatible:
-    const: sophgo,sg2044-spifmc-nor
+    description: Compatible strings for SOPHGO SPI NOR controller
+    items:
+      - enum:
+        - sophgo,sg2042-spifmc-nor
+      - const: sophgo,sg2044-spifmc-nor
 
   reg:
     maxItems: 1
