@@ -169,24 +169,52 @@ do {								\
 
 #endif /* CONFIG_64BIT */
 
-#define __get_user_nocheck(x, __gu_ptr, label)			\
-do {								\
-	switch (sizeof(*__gu_ptr)) {				\
-	case 1:							\
-		__get_user_asm("lb", (x), __gu_ptr, label);	\
-		break;						\
-	case 2:							\
-		__get_user_asm("lh", (x), __gu_ptr, label);	\
-		break;						\
-	case 4:							\
-		__get_user_asm("lw", (x), __gu_ptr, label);	\
-		break;						\
-	case 8:							\
-		__get_user_8((x), __gu_ptr, label);		\
-		break;						\
-	default:						\
-		BUILD_BUG();					\
-	}							\
+#define __get_user_aligned(x, ptr, label, len, insn_load)			\
+do {										\
+	u8 n = (u8)((unsigned long)(ptr) & ((len) - 1));			\
+	u8 size_ptr_bits = sizeof(__typeof__(*(ptr))) * 8;			\
+	__typeof__((ptr)) __user __ptr_lo = PTR_ALIGN_DOWN((ptr), (len));	\
+	__typeof__((ptr)) __user __ptr_hi = __ptr_lo + 1;			\
+	__inttype(*(ptr)) __lo, __hi;						\
+	long __gu8_err = 0;							\
+	__asm__ __volatile__ (							\
+		"1:\n"								\
+		"	" insn_load " %1, %3\n"					\
+		"2:\n"								\
+		"	" insn_load " %2, %4\n"					\
+		"3:\n"								\
+		_ASM_EXTABLE_UACCESS_ERR_ZERO(1b, 3b, %0, %1)			\
+		_ASM_EXTABLE_UACCESS_ERR_ZERO(2b, 3b, %0, %1)			\
+		: "+r" (__gu8_err), "=&r" (__lo), "=r" (__hi)			\
+		: "m" (__ptr_lo), "m" (__ptr_hi));				\
+	if (__gu8_err)								\
+		goto label;							\
+										\
+	(x) = (__typeof__(x))((__lo << n) | (__hi >> (size_ptr_bits - n)));	\
+} while (0)
+
+#define __get_user_nocheck(x, __gu_ptr, label)					\
+do {										\
+	switch (sizeof(*__gu_ptr)) {						\
+	case 1:									\
+		__get_user_asm("lb", (x), __gu_ptr, label);			\
+		break;								\
+	case 2:									\
+		__get_user_asm("lh", (x), __gu_ptr, label);			\
+		break;								\
+	case 4:									\
+		__get_user_asm("lw", (x), __gu_ptr, label);			\
+		break;								\
+	case 8:									\
+		if (likely(IS_ALIGNED((u64)__gu_ptr, 8))) {			\
+			__get_user_8((x), __gu_ptr, label);			\
+			break;							\
+		}								\
+		__get_user_aligned((x), __gu_ptr, label, 8, "ld");		\
+		break;								\
+	default:								\
+		BUILD_BUG();							\
+	}									\
 } while (0)
 
 #define __get_user_error(x, ptr, err)					\
@@ -295,24 +323,81 @@ do {								\
 } while (0)
 #endif /* CONFIG_64BIT */
 
-#define __put_user_nocheck(x, __gu_ptr, label)			\
-do {								\
-	switch (sizeof(*__gu_ptr)) {				\
-	case 1:							\
-		__put_user_asm("sb", (x), __gu_ptr, label);	\
-		break;						\
-	case 2:							\
-		__put_user_asm("sh", (x), __gu_ptr, label);	\
-		break;						\
-	case 4:							\
-		__put_user_asm("sw", (x), __gu_ptr, label);	\
-		break;						\
-	case 8:							\
-		__put_user_8((x), __gu_ptr, label);		\
-		break;						\
-	default:						\
-		BUILD_BUG();					\
-	}							\
+#define __put_user_aligned(x, ptr, label, len, insn_store, insn_load)	\
+do {										\
+	u8 n = (u8)((unsigned long)(ptr) & ((len) - 1));			\
+	u8 size_ptr_bits = sizeof(__typeof__(*(ptr))) * 8;			\
+	__typeof__((ptr)) __user __ptr_lo = PTR_ALIGN_DOWN((ptr), (len));	\
+	__typeof__((ptr)) __user __ptr_hi = __ptr_lo + 1;			\
+	__inttype(*(ptr)) __x = (__inttype(*(ptr)))(x);				\
+	__inttype(*(ptr)) __xlo = (__x) >> n;					\
+	__inttype(*(ptr)) __xhi = (__x) << (size_ptr_bits - n);			\
+	__inttype(*(ptr)) __lo, __hi;						\
+	long __gu8_err = 0;							\
+										\
+	__asm__ __volatile__ (							\
+		"1:\n"								\
+		"	" insn_load " %1, %3\n"					\
+		"2:\n"								\
+		"	" insn_load " %2, %4\n"					\
+		"3:\n"								\
+		_ASM_EXTABLE_UACCESS_ERR_ZERO(1b, 3b, %0, %1)			\
+		_ASM_EXTABLE_UACCESS_ERR_ZERO(2b, 3b, %0, %1)			\
+		: "+r" (__gu8_err), "=&r" (__lo), "=r" (__hi)			\
+		: "m" (__ptr_lo), "m" (__ptr_hi));				\
+	if (__gu8_err)								\
+		goto label;							\
+										\
+	__lo = ((__lo >> (size_ptr_bits - n)) << (size_ptr_bits - n)) | __xlo;	\
+	__hi = ((__hi << n) >> n) | __xhi;					\
+										\
+	__asm__ __volatile__ (							\
+		"1:\n"								\
+		"	" insn_store " %1, %3\n"				\
+		"2:\n"								\
+		"	" insn_store " %2, %4\n"				\
+		"3:\n"								\
+		_ASM_EXTABLE_UACCESS_ERR_ZERO(1b, 3b, %0, %1)			\
+		_ASM_EXTABLE_UACCESS_ERR_ZERO(2b, 3b, %0, %1)			\
+		: "+r" (__gu8_err), "=&r" (__lo), "=r" (__hi)			\
+		: "m" (__ptr_lo), "m" (__ptr_hi));				\
+	if (__gu8_err)								\
+		goto label;							\
+} while (0)
+
+#define __put_user_nocheck(x, __gu_ptr, label)					\
+do {										\
+	switch (sizeof(*__gu_ptr)) {						\
+	case 1:									\
+		__put_user_asm("sb", (x), __gu_ptr, label);			\
+		break;								\
+	case 2:									\
+		if (!IS_ENABLED(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS) &&	\
+		    !IS_ALIGNED((unsigned long)__gu_ptr, 2)) {			\
+			__put_user_aligned((x), __gu_ptr, label, 2, "sh", "lh");\
+			break;							\
+		}								\
+		__put_user_asm("sh", (x), __gu_ptr, label);			\
+		break;								\
+	case 4:									\
+		if (!IS_ENABLED(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS) &&	\
+		    !IS_ALIGNED((unsigned long)__gu_ptr, 4)) {			\
+			__put_user_aligned((x), __gu_ptr, label, 4, "sw", "lw");\
+			break;							\
+		}								\
+		__put_user_asm("sw", (x), __gu_ptr, label);			\
+		break;								\
+	case 8:									\
+		if (!IS_ENABLED(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS) &&	\
+		    !IS_ALIGNED((unsigned long)__gu_ptr, 8)) {			\
+			__put_user_aligned((x), __gu_ptr, label, 8, "sd", "ld");\
+			break;							\
+		}								\
+		__put_user_8((x), __gu_ptr, label);				\
+		break;								\
+	default:								\
+		BUILD_BUG();							\
+	}									\
 } while (0)
 
 #define __put_user_error(x, ptr, err)				\
