@@ -1,0 +1,42 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/power/thead,th1520-pwrseq.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: T-HEAD TH1520 GPU Power Sequencer
+
+maintainers:
+  - Michal Wilczynski <m.wilczynski@samsung.com>
+
+description: |
+  This binding describes the power sequencer for the T-HEAD TH1520 GPU.
+  This sequencer handles the specific power-up and power-down sequences
+  required by the GPU, including managing clocks and resets from both the
+  sequencer and the GPU device itself.
+
+properties:
+  compatible:
+    const: thead,th1520-gpu-pwrseq
+
+  resets:
+    description: A phandle to the GPU clock generator reset.
+    maxItems: 1
+
+  reset-names:
+    const: gpu-clkgen
+
+required:
+  - compatible
+  - resets
+  - reset-names
+
+additionalProperties: false
+
+examples:
+  - |
+    gpu_pwrseq: pwrseq {
+        compatible = "thead,th1520-gpu-pwrseq";
+        resets = <&rst 0>;
+        reset-names = "gpu-clkgen";
+    };
