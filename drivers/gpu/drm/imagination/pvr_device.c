@@ -25,6 +25,7 @@
 #include <linux/interrupt.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/pwrseq/consumer.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
 #include <linux/stddef.h>
@@ -631,10 +632,34 @@ pvr_device_init(struct pvr_device *pvr_dev)
 	if (err)
 		return err;
 
-	/* Get the reset line for the GPU */
-	err = pvr_device_reset_init(pvr_dev);
-	if (err)
-		return err;
+	/*
+	 * Try to get a power sequencer. If successful, it will handle clocks
+	 * and resets. Otherwise, we fall back to managing them ourselves.
+	 */
+	pvr_dev->pwrseq = devm_pwrseq_get(dev, "gpu-power");
+	if (IS_ERR(pvr_dev->pwrseq)) {
+		int pwrseq_err = PTR_ERR(pvr_dev->pwrseq);
+
+		/*
+		 * If the error is -EPROBE_DEFER, it's because the
+		 * optional sequencer provider is not present
+		 * and it's safe to fall back on manual power-up.
+		 */
+		if (pwrseq_err == -EPROBE_DEFER)
+			pvr_dev->pwrseq = NULL;
+		else
+			return dev_err_probe(dev, pwrseq_err,
+					     "Failed to get power sequencer\n");
+	}
+
+	/* Get the reset line for the GPU, but since it's exclusive only
+	 * get it if the pwerseq is NULL.
+	 */
+	if (!pvr_dev->pwrseq) {
+		err = pvr_device_reset_init(pvr_dev);
+		if (err)
+			return err;
+	}
 
 	/* Explicitly power the GPU so we can access control registers before the FW is booted. */
 	err = pm_runtime_resume_and_get(dev);
