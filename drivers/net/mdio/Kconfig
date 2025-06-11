@@ -278,5 +278,15 @@ config MDIO_BUS_MUX_MMIOREG
 
 	  Currently, only 8/16/32 bits registers are supported.
 
+config MDIO_BUS_MUX_SOPHGO_CV1800B
+	tristate "Sophgo CV1800 MDIO multiplexer driver"
+	depends on ARCH_SOPHGO || COMPILE_TEST
+	depends on OF_MDIO && HAS_IOMEM
+	select MDIO_BUS_MUX
+	default m if ARCH_SOPHGO
+	help
+	  This module provides a driver for the MDIO multiplexer/glue of
+	  the Sophgo CV1800 series SoC. The multiplexer connects either
+	  the external or the internal MDIO bus to the parent bus.
 
 endif
