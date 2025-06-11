@@ -93,4 +93,14 @@ config KUNIT_AUTORUN_ENABLED
 	  In most cases this should be left as Y. Only if additional opt-in
 	  behavior is needed should this be set to N.
 
+config KUNIT_UAPI
+	def_bool y
+	depends on KUNIT=y
+	depends on CC_CAN_LINK_STATIC || ARCH_HAS_NOLIBC
+	select HEADERS_INSTALL
+	help
+	  Enables support for building and running userspace selftests as part of kunit.
+	  These tests should be statically linked and use kselftest.h or kselftest_harness.h
+	  for status reporting.
+
 endif # KUNIT
