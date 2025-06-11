@@ -139,7 +139,7 @@ static int kunit_uapi_user_mode_thread_init(void *data)
 	kernel_sigaction(SIGABRT, SIG_DFL);
 
 	complete(&ctx->setup_done);
-	ctx->exec_err = kernel_execve(ctx->executable, argv, NULL);
+	ctx->exec_err = kernel_execve(kbasename(BLOB(kunit_uapi_preinit)->path), argv, NULL);
 	if (!ctx->exec_err)
 		return 0;
 	do_exit(0);
@@ -239,6 +239,7 @@ static int kunit_uapi_run_executable_in_mount(struct kunit *test, const char *ex
 
 static int kunit_uapi_run_executable(struct kunit *test, const struct blob *executable)
 {
+	const struct blob *preinit = BLOB(kunit_uapi_preinit);
 	const char *exe_name = kbasename(executable->path);
 	struct vfsmount *mnt;
 	int err;
@@ -247,7 +248,13 @@ static int kunit_uapi_run_executable(struct kunit *test, const struct blob *exec
 	if (IS_ERR(mnt))
 		return PTR_ERR(mnt);
 
-	err = kunit_uapi_write_file(mnt, exe_name, 0755, executable->data, blob_size(executable));
+	err = kunit_uapi_write_file(mnt, kbasename(preinit->path), 0755,
+				    preinit->data,
+				    blob_size(preinit));
+
+	if (!err)
+		err = kunit_uapi_write_file(mnt, exe_name, 0755,
+					    executable->data, blob_size(executable));
 
 	if (!err)
 		err = kunit_uapi_run_executable_in_mount(test, exe_name, mnt);

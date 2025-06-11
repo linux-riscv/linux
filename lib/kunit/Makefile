@@ -12,7 +12,14 @@ kunit-objs +=				test.o \
 					device.o \
 					platform.o
 
-kunit-$(CONFIG_KUNIT_UAPI) +=		uapi.o
+userprogs +=				uapi-preinit
+uapi-preinit-nolibc :=			$(CONFIG_ARCH_HAS_NOLIBC)
+uapi-preinit-userccflags +=		-static \
+					-include include/generated/autoconf.h \
+					-include $(srctree)/tools/include/linux/kconfig.h
+blobs +=				uapi-preinit.blob.o
+uapi-preinit.blob-symbol :=		kunit_uapi_preinit
+kunit-$(CONFIG_KUNIT_UAPI) +=		uapi.o uapi-preinit.blob.o
 
 ifeq ($(CONFIG_KUNIT_DEBUGFS),y)
 kunit-objs +=				debugfs.o
