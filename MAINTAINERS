@@ -13063,11 +13063,13 @@ Q:	https://patchwork.kernel.org/project/linux-kbuild/list/
 T:	git git://git.kernel.org/pub/scm/linux/kernel/git/masahiroy/linux-kbuild.git
 F:	Documentation/kbuild/
 F:	Makefile
+F:	include/linux/blob.h
 F:	scripts/*vmlinux*
 F:	scripts/Kbuild*
 F:	scripts/Makefile*
 F:	scripts/bash-completion/
 F:	scripts/basic/
+F:	scripts/blob-wrap.c
 F:	scripts/clang-tools/
 F:	scripts/dummy-tools/
 F:	scripts/include/

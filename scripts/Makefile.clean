@@ -25,7 +25,7 @@ subdir-ymn	:= $(addprefix $(obj)/,$(subdir-ymn))
 # directory
 
 __clean-files	:= \
-	$(clean-files) $(targets) $(hostprogs) $(userprogs) \
+	$(clean-files) $(targets) $(hostprogs) $(userprogs) $(blobs) \
 	$(extra-y) $(extra-m) $(extra-) \
 	$(always-y) $(always-m) $(always-) \
 	$(hostprogs-always-y) $(hostprogs-always-m) $(hostprogs-always-) \

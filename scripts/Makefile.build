@@ -529,6 +529,12 @@ ifneq ($(need-dtbslist)$(dtb-y)$(dtb-)$(filter %.dtb %.dtb.o %.dtbo.o,$(targets)
 include $(srctree)/scripts/Makefile.dtbs
 endif
 
+# $(sort ...) is used here to remove duplicated words and excessive spaces.
+blobs := $(sort $(blobs))
+ifneq ($(blobs),)
+include $(srctree)/scripts/Makefile.blobs
+endif
+
 # Build
 # ---------------------------------------------------------------------------
 

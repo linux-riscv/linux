@@ -525,8 +525,8 @@ otherwise the command line check will fail, and the target will
 always be built.
 
 If the target is already listed in the recognized syntax such as
-obj-y/m, lib-y/m, extra-y/m, always-y/m, hostprogs, userprogs, Kbuild
-automatically adds it to $(targets). Otherwise, the target must be
+obj-y/m, lib-y/m, extra-y/m, always-y/m, hostprogs, userprogs, blobs,
+Kbuild automatically adds it to $(targets). Otherwise, the target must be
 explicitly added to $(targets).
 
 Assignments to $(targets) are without $(obj)/ prefix. if_changed may be
@@ -1018,6 +1018,25 @@ There are two ways to do this.
 
     This will tell Kbuild to build binderfs_example when it visits this
     Makefile.
+
+.. _kbuild_blobs:
+
+Blob framework
+==============
+
+Kbuild supports wrapping source or generated files into object files which are linked
+into the kernel and then accessed at runtime through ``include/linux/blob.h``.
+
+Example::
+
+  obj-m := some-module.o
+  userprogs := some-userprog
+  blobs := some-userprog.blob.o
+  some-userprog.blob-symbol := some_userprog
+  some-module-y += some-userprog.blob.o
+
+Kbuild will build the :ref:`userprog <kbuild_userprogs>` ``some-userprog`` and
+link it into ``some-module`` from where it can be accessed as ``BLOB(some_userprog)``.
 
 Kbuild clean infrastructure
 ===========================
