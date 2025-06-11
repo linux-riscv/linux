@@ -974,6 +974,19 @@ When linking bpfilter_umh, it will be passed the extra option -static.
 
 From command line, :ref:`USERCFLAGS and USERLDFLAGS <userkbuildflags>` will also be used.
 
+Building userprogs against nolibc
+---------------------------------
+
+Not all kernel toolchains provide a libc.
+Simple userprogs can be built against a very simple libc call "nolibc" provided
+by the kernel source tree.
+This requires ``CONFIG_HEADERS_INSTALL=y``.
+
+Example::
+
+  # lib/kunit/Makefile
+  uapi-preinit-nolibc := $(CONFIG_ARCH_HAS_NOLIBC)
+
 When userspace programs are actually built
 ------------------------------------------
 
