@@ -30,4 +30,11 @@ obj-$(CONFIG_KUNIT_TEST) +=		string-stream-test.o
 obj-$(CONFIG_KUNIT_TEST) +=		assert_test.o
 endif
 
-obj-$(CONFIG_KUNIT_EXAMPLE_TEST) +=	kunit-example-test.o
+userprogs +=				kunit-example-uapi
+kunit-example-uapi-userccflags :=	-static
+kunit-example-uapi-nolibc :=		$(CONFIG_ARCH_HAS_NOLIBC)
+blobs +=				kunit-example-uapi.blob.o
+
+obj-$(CONFIG_KUNIT_EXAMPLE_TEST) +=	kunit-example-mod.o
+kunit-example-mod-y +=			kunit-example-test.o
+kunit-example-mod-$(CONFIG_KUNIT_UAPI) += kunit-example-uapi.blob.o
