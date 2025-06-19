@@ -11,7 +11,6 @@
 #include <linux/types.h>
 #include <linux/cpumask.h>
 #include <linux/jump_label.h>
-#include <linux/tracepoint-defs.h>
 
 #ifdef CONFIG_RISCV_SBI
 enum sbi_ext_id {
@@ -461,16 +460,6 @@ struct sbiret {
 	long value;
 };
 
-#ifdef CONFIG_TRACEPOINTS
-DECLARE_TRACEPOINT(sbi_call);
-DECLARE_TRACEPOINT(sbi_return);
-extern void do_trace_sbi_call(int ext, int fid);
-extern void do_trace_sbi_return(int ext, long error, long value);
-#else
-static inline void do_trace_sbi_call(int ext, int fid) {};
-static inline void do_trace_sbi_return(int ext, long error, long value) {};
-#endif
-
 void sbi_init(void);
 long __sbi_base_ecall(int fid);
 
@@ -509,32 +498,17 @@ long __sbi_base_ecall(int fid);
 #define __sbi_ecall_constraints7  __sbi_ecall_constraints6, "r" (__a4)
 #define __sbi_ecall_constraints8  __sbi_ecall_constraints7, "r" (__a5)
 
-#define __sbi_ecall_trace_call() \
-	if (tracepoint_enabled(sbi_call)) \
-		do_trace_sbi_call(__ta7, __ta6)
-
-#define __sbi_ecall_trace_return() \
-	if (tracepoint_enabled(sbi_return)) \
-		do_trace_sbi_return(__ta7, __ret.error, __ret.value)
-
-/*
- * Clear a1 to avoid leaking unrelated kernel state through tracepoints in case
- * the register doesn't get overwritten by the ecall nor the arguments.
- */
 #define sbi_ecall(A...) \
 ({ \
 	CONCATENATE(__sbi_ecall_args, COUNT_ARGS(A))(A); \
-	__sbi_ecall_trace_call(); \
 	register uintptr_t __r0 asm ("a0"); \
-	register uintptr_t __r1 asm ("a1") = 0; \
+	register uintptr_t __r1 asm ("a1"); \
 	CONCATENATE(__sbi_ecall_regs, COUNT_ARGS(A)); \
 	asm volatile ("ecall" \
 			: "=r" (__r0), "=r" (__r1) \
 			: CONCATENATE(__sbi_ecall_constraints, COUNT_ARGS(A)) \
 			: "memory"); \
-	struct sbiret __ret = {.error = __r0, .value = __r1}; \
-	__sbi_ecall_trace_return(); \
-	__ret; \
+	(struct sbiret){.error = __r0, .value = __r1}; \
 })
 
 #ifdef CONFIG_RISCV_SBI_V01
