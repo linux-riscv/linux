@@ -18,6 +18,9 @@
 #include <linux/platform_device.h>
 #include <linux/pm_domain.h>
 #include <linux/pm_runtime.h>
+#if IS_ENABLED(CONFIG_POWER_SEQUENCING)
+#include <linux/pwrseq/consumer.h>
+#endif
 #include <linux/reset.h>
 #include <linux/timer.h>
 #include <linux/types.h>
@@ -234,51 +237,13 @@ pvr_watchdog_init(struct pvr_device *pvr_dev)
 	return 0;
 }
 
-int
-pvr_power_device_suspend(struct device *dev)
+static int pvr_power_on_sequence_manual(struct pvr_device *pvr_dev)
 {
-	struct platform_device *plat_dev = to_platform_device(dev);
-	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
-	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
-	int err = 0;
-	int idx;
-
-	if (!drm_dev_enter(drm_dev, &idx))
-		return -EIO;
-
-	if (pvr_dev->fw_dev.booted) {
-		err = pvr_power_fw_disable(pvr_dev, false);
-		if (err)
-			goto err_drm_dev_exit;
-	}
-
-	clk_disable_unprepare(pvr_dev->mem_clk);
-	clk_disable_unprepare(pvr_dev->sys_clk);
-	clk_disable_unprepare(pvr_dev->core_clk);
-
-	err = reset_control_assert(pvr_dev->reset);
-
-err_drm_dev_exit:
-	drm_dev_exit(idx);
-
-	return err;
-}
-
-int
-pvr_power_device_resume(struct device *dev)
-{
-	struct platform_device *plat_dev = to_platform_device(dev);
-	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
-	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
-	int idx;
 	int err;
-
-	if (!drm_dev_enter(drm_dev, &idx))
-		return -EIO;
 
 	err = clk_prepare_enable(pvr_dev->core_clk);
 	if (err)
-		goto err_drm_dev_exit;
+		return err;
 
 	err = clk_prepare_enable(pvr_dev->sys_clk);
 	if (err)
@@ -302,18 +267,7 @@ pvr_power_device_resume(struct device *dev)
 	if (err)
 		goto err_mem_clk_disable;
 
-	if (pvr_dev->fw_dev.booted) {
-		err = pvr_power_fw_enable(pvr_dev);
-		if (err)
-			goto err_reset_assert;
-	}
-
-	drm_dev_exit(idx);
-
 	return 0;
-
-err_reset_assert:
-	reset_control_assert(pvr_dev->reset);
 
 err_mem_clk_disable:
 	clk_disable_unprepare(pvr_dev->mem_clk);
@@ -324,6 +278,109 @@ err_sys_clk_disable:
 err_core_clk_disable:
 	clk_disable_unprepare(pvr_dev->core_clk);
 
+	return err;
+}
+
+static int pvr_power_off_sequence_manual(struct pvr_device *pvr_dev)
+{
+	int err;
+
+	err = reset_control_assert(pvr_dev->reset);
+
+	clk_disable_unprepare(pvr_dev->mem_clk);
+	clk_disable_unprepare(pvr_dev->sys_clk);
+	clk_disable_unprepare(pvr_dev->core_clk);
+
+	return err;
+}
+
+const struct pvr_power_sequence_ops pvr_power_sequence_ops_manual = {
+	.power_on = pvr_power_on_sequence_manual,
+	.power_off = pvr_power_off_sequence_manual,
+};
+
+#if IS_ENABLED(CONFIG_POWER_SEQUENCING)
+static int pvr_power_on_sequence_pwrseq(struct pvr_device *pvr_dev)
+{
+	return pwrseq_power_on(pvr_dev->pwrseq);
+}
+
+static int pvr_power_off_sequence_pwrseq(struct pvr_device *pvr_dev)
+{
+	return pwrseq_power_off(pvr_dev->pwrseq);
+}
+
+const struct pvr_power_sequence_ops pvr_power_sequence_ops_pwrseq = {
+	.power_on = pvr_power_on_sequence_pwrseq,
+	.power_off = pvr_power_off_sequence_pwrseq,
+};
+#else /* IS_ENABLED(CONFIG_POWER_SEQUENCING) */
+static int pvr_power_sequence_pwrseq_stub(struct pvr_device *pvr_dev)
+{
+	WARN_ONCE(1, "pwrseq support not enabled in kernel config\n");
+	return -EOPNOTSUPP;
+}
+
+const struct pvr_power_sequence_ops pvr_power_sequence_ops_pwrseq = {
+	.power_on = pvr_power_sequence_pwrseq_stub,
+	.power_off = pvr_power_sequence_pwrseq_stub,
+};
+#endif /* IS_ENABLED(CONFIG_POWER_SEQUENCING) */
+
+int
+pvr_power_device_suspend(struct device *dev)
+{
+	struct platform_device *plat_dev = to_platform_device(dev);
+	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
+	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
+	int err = 0;
+	int idx;
+
+	if (!drm_dev_enter(drm_dev, &idx))
+		return -EIO;
+
+	if (pvr_dev->fw_dev.booted) {
+		err = pvr_power_fw_disable(pvr_dev, false);
+		if (err)
+			goto err_drm_dev_exit;
+	}
+
+	err = pvr_dev->device_data->pwr_ops->power_off(pvr_dev);
+
+err_drm_dev_exit:
+	drm_dev_exit(idx);
+
+	return err;
+}
+
+int
+pvr_power_device_resume(struct device *dev)
+{
+	struct platform_device *plat_dev = to_platform_device(dev);
+	struct drm_device *drm_dev = platform_get_drvdata(plat_dev);
+	struct pvr_device *pvr_dev = to_pvr_device(drm_dev);
+	int idx;
+	int err;
+
+	if (!drm_dev_enter(drm_dev, &idx))
+		return -EIO;
+
+	err = pvr_dev->device_data->pwr_ops->power_on(pvr_dev);
+	if (err)
+		goto err_drm_dev_exit;
+
+	if (pvr_dev->fw_dev.booted) {
+		err = pvr_power_fw_enable(pvr_dev);
+		if (err)
+			goto err_power_off;
+	}
+
+	drm_dev_exit(idx);
+
+	return 0;
+
+err_power_off:
+	pvr_dev->device_data->pwr_ops->power_off(pvr_dev);
 err_drm_dev_exit:
 	drm_dev_exit(idx);
 
