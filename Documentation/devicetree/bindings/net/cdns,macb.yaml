@@ -57,6 +57,7 @@ properties:
           - cdns,np4-macb             # NP4 SoC devices
           - microchip,sama7g5-emac    # Microchip SAMA7G5 ethernet interface
           - microchip,sama7g5-gem     # Microchip SAMA7G5 gigabit ethernet interface
+          - mobileye,eyeq5-gem        # Mobileye EyeQ5 SoCs
           - sifive,fu540-c000-gem     # SiFive FU540-C000 SoC
 
       - items:
@@ -136,6 +137,17 @@ properties:
       Node containing PHY children. If this node is not present, then PHYs will
       be direct children.
 
+  mobileye,olb:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      Handle to the OLB system controller that owns registers configuring the
+      MACB integration.
+    items:
+      - items:
+          - description: phandle to OLB node
+          - description: MAC General-Purpose register offset
+          - description: MAC SGMII register offset
+
 patternProperties:
   "^ethernet-phy@[0-9a-f]$":
     type: object
@@ -173,6 +185,18 @@ allOf:
       properties:
         reg:
           maxItems: 1
+
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: mobileye,eyeq5-gem
+    then:
+      required:
+        - mobileye,olb
+    else:
+      properties:
+        mobileye,olb: false
 
 unevaluatedProperties: false
 
