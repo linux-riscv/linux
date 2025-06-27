@@ -20,6 +20,7 @@
 #include <linux/iopoll.h>
 #include <linux/ip.h>
 #include <linux/kernel.h>
+#include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/moduleparam.h>
 #include <linux/netdevice.h>
@@ -31,6 +32,7 @@
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/ptp_classify.h>
+#include <linux/regmap.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
 #include <linux/tcp.h>
@@ -4957,6 +4959,72 @@ err_out_phy_exit:
 	return ret;
 }
 
+#define EYEQ5_OLB_GP_TX_SWRST_DIS	BIT(0)		// Tx SW reset
+#define EYEQ5_OLB_GP_TX_M_CLKE		BIT(1)		// Tx M clock enable
+#define EYEQ5_OLB_GP_SYS_SWRST_DIS	BIT(2)		// Sys SW reset
+#define EYEQ5_OLB_GP_SYS_M_CLKE		BIT(3)		// Sys clock enable
+#define EYEQ5_OLB_GP_SGMII_MODE		BIT(4)		// SGMII mode
+#define EYEQ5_OLB_GP_RGMII_DRV		GENMASK(8, 5)	// RGMII mode
+
+#define EYEQ5_OLB_SGMII_PWR_EN		BIT(0)
+#define EYEQ5_OLB_SGMII_RST_DIS		BIT(1)
+#define EYEQ5_OLB_SGMII_PLL_EN		BIT(2)
+#define EYEQ5_OLB_SGMII_SIG_DET_SW	BIT(3)
+#define EYEQ5_OLB_SGMII_PWR_STATE	BIT(4)
+#define EYEQ5_OLB_SGMII_PLL_ACK		BIT(18)
+
+static int eyeq5_init(struct platform_device *pdev)
+{
+	struct device *dev = &pdev->dev;
+	struct net_device *netdev = platform_get_drvdata(pdev);
+	struct macb *bp = netdev_priv(netdev);
+	struct device_node *np = dev->of_node;
+	unsigned int gp, sgmii;
+	struct regmap *regmap;
+	unsigned int args[2];
+	unsigned int reg;
+	int ret;
+
+	regmap = syscon_regmap_lookup_by_phandle_args(np, "mobileye,olb", 2, args);
+	if (IS_ERR(regmap))
+		return PTR_ERR(regmap);
+
+	gp = args[0];
+	sgmii = args[1];
+
+	/* Forced reset */
+	regmap_write(regmap, gp, 0);
+	regmap_write(regmap, sgmii, 0);
+	usleep_range(5, 20);
+
+	if (bp->phy_interface == PHY_INTERFACE_MODE_SGMII) {
+		regmap_write(regmap, gp, EYEQ5_OLB_GP_SGMII_MODE);
+
+		reg = EYEQ5_OLB_SGMII_PWR_EN | EYEQ5_OLB_SGMII_RST_DIS |
+		      EYEQ5_OLB_SGMII_PLL_EN;
+		regmap_write(regmap, sgmii, reg);
+
+		ret = regmap_read_poll_timeout(regmap, sgmii, reg,
+					       reg & EYEQ5_OLB_SGMII_PLL_ACK,
+					       1, 100);
+		if (ret)
+			return dev_err_probe(dev, ret, "PLL timeout");
+
+		reg = EYEQ5_OLB_SGMII_PWR_STATE | EYEQ5_OLB_SGMII_SIG_DET_SW;
+		regmap_update_bits(regmap, sgmii, reg, reg);
+	}
+
+	reg = phy_interface_mode_is_rgmii(bp->phy_interface) ? 0x9 : 0x0;
+	regmap_update_bits(regmap, gp, EYEQ5_OLB_GP_RGMII_DRV,
+			   FIELD_PREP(EYEQ5_OLB_GP_RGMII_DRV, reg));
+
+	reg = EYEQ5_OLB_GP_TX_SWRST_DIS | EYEQ5_OLB_GP_TX_M_CLKE |
+	      EYEQ5_OLB_GP_SYS_SWRST_DIS | EYEQ5_OLB_GP_SYS_M_CLKE;
+	regmap_update_bits(regmap, gp, reg, reg);
+
+	return macb_init(pdev);
+}
+
 static const struct macb_usrio_config sama7g5_usrio = {
 	.mii = 0,
 	.rmii = 1,
@@ -5109,6 +5177,17 @@ static const struct macb_config versal_config = {
 	.usrio = &macb_default_usrio,
 };
 
+static const struct macb_config eyeq5_config = {
+	.caps = MACB_CAPS_GIGABIT_MODE_AVAILABLE | MACB_CAPS_JUMBO |
+		MACB_CAPS_GEM_HAS_PTP | MACB_CAPS_QUEUE_DISABLE |
+		MACB_CAPS_NO_LSO,
+	.dma_burst_length = 16,
+	.clk_init = macb_clk_init,
+	.init = eyeq5_init,
+	.jumbo_max_len = 10240,
+	.usrio = &macb_default_usrio,
+};
+
 static const struct of_device_id macb_dt_ids[] = {
 	{ .compatible = "cdns,at91sam9260-macb", .data = &at91sam9260_config },
 	{ .compatible = "cdns,macb" },
@@ -5129,6 +5208,7 @@ static const struct of_device_id macb_dt_ids[] = {
 	{ .compatible = "microchip,mpfs-macb", .data = &mpfs_config },
 	{ .compatible = "microchip,sama7g5-gem", .data = &sama7g5_gem_config },
 	{ .compatible = "microchip,sama7g5-emac", .data = &sama7g5_emac_config },
+	{ .compatible = "mobileye,eyeq5-gem", .data = &eyeq5_config },
 	{ .compatible = "xlnx,zynqmp-gem", .data = &zynqmp_config},
 	{ .compatible = "xlnx,zynq-gem", .data = &zynq_config },
 	{ .compatible = "xlnx,versal-gem", .data = &versal_config},
