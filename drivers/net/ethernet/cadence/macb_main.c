@@ -2445,33 +2445,32 @@ static void macb_free_rx_buffers(struct macb *bp)
 
 static void macb_free_consistent(struct macb *bp)
 {
-	struct macb_queue *queue;
+	size_t size, tx_size_per_queue, rx_size_per_queue;
+	struct macb_queue *queue, *queue0 = bp->queues;
+	struct device *dev = &bp->pdev->dev;
 	unsigned int q;
-	int size;
 
 	if (bp->rx_ring_tieoff) {
-		dma_free_coherent(&bp->pdev->dev, macb_dma_desc_get_size(bp),
+		dma_free_coherent(dev, macb_dma_desc_get_size(bp),
 				  bp->rx_ring_tieoff, bp->rx_ring_tieoff_dma);
 		bp->rx_ring_tieoff = NULL;
 	}
 
 	bp->macbgem_ops.mog_free_rx_buffers(bp);
 
+	tx_size_per_queue = TX_RING_BYTES(bp) + bp->tx_bd_rd_prefetch;
+	size = bp->num_queues * tx_size_per_queue;
+	dma_free_coherent(dev, size, queue0->tx_ring, queue0->tx_ring_dma);
+
+	rx_size_per_queue = RX_RING_BYTES(bp) + bp->rx_bd_rd_prefetch;
+	size = bp->num_queues * rx_size_per_queue;
+	dma_free_coherent(dev, size, queue0->rx_ring, queue0->rx_ring_dma);
+
 	for (q = 0, queue = bp->queues; q < bp->num_queues; ++q, ++queue) {
 		kfree(queue->tx_skb);
 		queue->tx_skb = NULL;
-		if (queue->tx_ring) {
-			size = TX_RING_BYTES(bp) + bp->tx_bd_rd_prefetch;
-			dma_free_coherent(&bp->pdev->dev, size,
-					  queue->tx_ring, queue->tx_ring_dma);
-			queue->tx_ring = NULL;
-		}
-		if (queue->rx_ring) {
-			size = RX_RING_BYTES(bp) + bp->rx_bd_rd_prefetch;
-			dma_free_coherent(&bp->pdev->dev, size,
-					  queue->rx_ring, queue->rx_ring_dma);
-			queue->rx_ring = NULL;
-		}
+		queue->tx_ring = NULL; /* Single buffer owned by queue0 */
+		queue->rx_ring = NULL; /* Single buffer owned by queue0 */
 	}
 }
 
@@ -2513,37 +2512,47 @@ static int macb_alloc_rx_buffers(struct macb *bp)
 
 static int macb_alloc_consistent(struct macb *bp)
 {
+	size_t size, tx_size_per_queue, rx_size_per_queue;
+	dma_addr_t tx_dma, rx_dma;
+	struct device *dev = &bp->pdev->dev;
 	struct macb_queue *queue;
 	unsigned int q;
-	int size;
+	void *tx, *rx;
+
+	/*
+	 * Upper 32-bits of Tx/Rx DMA descriptor for each queues much match!
+	 * We cannot enforce this guarantee, the best we can do is do a single
+	 * allocation and hope it will land into alloc_pages() that guarantees
+	 * natural alignment of physical addresses.
+	 */
+
+	tx_size_per_queue = TX_RING_BYTES(bp) + bp->tx_bd_rd_prefetch;
+	size = bp->num_queues * tx_size_per_queue;
+	tx = dma_alloc_coherent(dev, size, &tx_dma, GFP_KERNEL);
+	if (!tx || upper_32_bits(tx_dma) != upper_32_bits(tx_dma + size - 1))
+		goto out_err;
+	netdev_dbg(bp->dev, "Allocated %zu bytes for %u TX rings at %08lx (mapped %p)\n",
+		   size, bp->num_queues, (unsigned long)tx_dma, tx);
+
+	rx_size_per_queue = RX_RING_BYTES(bp) + bp->rx_bd_rd_prefetch;
+	size = bp->num_queues * rx_size_per_queue;
+	rx = dma_alloc_coherent(dev, size, &rx_dma, GFP_KERNEL);
+	if (!rx || upper_32_bits(rx_dma) != upper_32_bits(rx_dma + size - 1))
+		goto out_err;
+	netdev_dbg(bp->dev, "Allocated %zu bytes for %u RX rings at %08lx (mapped %p)\n",
+		   size, bp->num_queues, (unsigned long)rx_dma, rx);
 
 	for (q = 0, queue = bp->queues; q < bp->num_queues; ++q, ++queue) {
-		size = TX_RING_BYTES(bp) + bp->tx_bd_rd_prefetch;
-		queue->tx_ring = dma_alloc_coherent(&bp->pdev->dev, size,
-						    &queue->tx_ring_dma,
-						    GFP_KERNEL);
-		if (!queue->tx_ring ||
-		    upper_32_bits(queue->tx_ring_dma) != upper_32_bits(bp->queues->tx_ring_dma))
-			goto out_err;
-		netdev_dbg(bp->dev,
-			   "Allocated TX ring for queue %u of %d bytes at %08lx (mapped %p)\n",
-			   q, size, (unsigned long)queue->tx_ring_dma,
-			   queue->tx_ring);
+		queue->tx_ring = tx + tx_size_per_queue * q;
+		queue->tx_ring_dma = tx_dma + tx_size_per_queue * q;
+
+		queue->rx_ring = rx + rx_size_per_queue * q;
+		queue->rx_ring_dma = rx_dma + rx_size_per_queue * q;
 
 		size = bp->tx_ring_size * sizeof(struct macb_tx_skb);
 		queue->tx_skb = kmalloc(size, GFP_KERNEL);
 		if (!queue->tx_skb)
 			goto out_err;
-
-		size = RX_RING_BYTES(bp) + bp->rx_bd_rd_prefetch;
-		queue->rx_ring = dma_alloc_coherent(&bp->pdev->dev, size,
-						 &queue->rx_ring_dma, GFP_KERNEL);
-		if (!queue->rx_ring ||
-		    upper_32_bits(queue->rx_ring_dma) != upper_32_bits(bp->queues->rx_ring_dma))
-			goto out_err;
-		netdev_dbg(bp->dev,
-			   "Allocated RX ring of %d bytes at %08lx (mapped %p)\n",
-			   size, (unsigned long)queue->rx_ring_dma, queue->rx_ring);
 	}
 	if (bp->macbgem_ops.mog_alloc_rx_buffers(bp))
 		goto out_err;
