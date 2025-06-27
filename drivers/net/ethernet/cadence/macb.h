@@ -15,10 +15,6 @@
 #include <linux/phy/phy.h>
 #include <linux/workqueue.h>
 
-#if defined(CONFIG_ARCH_DMA_ADDR_T_64BIT) || defined(CONFIG_MACB_USE_HWSTAMP)
-#define MACB_EXT_DESC
-#endif
-
 #define MACB_GREGS_NBR 16
 #define MACB_GREGS_VERSION 2
 #define MACB_MAX_QUEUES 8
@@ -823,7 +819,6 @@ struct macb_dma_desc {
 	u32	ctrl;
 };
 
-#ifdef MACB_EXT_DESC
 #define HW_DMA_CAP_32B		0
 #define HW_DMA_CAP_64B		(1 << 0)
 #define HW_DMA_CAP_PTP		(1 << 1)
@@ -838,7 +833,6 @@ struct macb_dma_desc_ptp {
 	u32	ts_1;
 	u32	ts_2;
 };
-#endif
 
 /* DMA descriptor bitfields */
 #define MACB_RX_USED_OFFSET			0
@@ -1316,9 +1310,7 @@ struct macb {
 
 	struct phy		*sgmii_phy;	/* for ZynqMP SGMII mode */
 
-#ifdef MACB_EXT_DESC
 	uint8_t hw_dma_cap;
-#endif
 	spinlock_t tsu_clk_lock; /* gem tsu clock locking */
 	unsigned int tsu_rate;
 	struct ptp_clock *ptp_clock;
