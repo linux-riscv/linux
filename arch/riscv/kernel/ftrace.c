@@ -198,12 +198,6 @@ int ftrace_update_ftrace_func(ftrace_func_t func)
 	smp_call_function(ftrace_sync_ipi, NULL, 1);
 	return 0;
 }
-
-#else /* CONFIG_DYNAMIC_FTRACE */
-unsigned long ftrace_call_adjust(unsigned long addr)
-{
-	return addr;
-}
 #endif /* CONFIG_DYNAMIC_FTRACE */
 
 #ifdef CONFIG_DYNAMIC_FTRACE_WITH_DIRECT_CALLS
@@ -244,7 +238,6 @@ void prepare_ftrace_return(unsigned long *parent, unsigned long self_addr,
 		*parent = return_hooker;
 }
 
-#ifdef CONFIG_DYNAMIC_FTRACE
 void ftrace_graph_func(unsigned long ip, unsigned long parent_ip,
 		       struct ftrace_ops *op, struct ftrace_regs *fregs)
 {
@@ -265,5 +258,4 @@ void ftrace_graph_func(unsigned long ip, unsigned long parent_ip,
 	if (!function_graph_enter_regs(old, ip, frame_pointer, parent, fregs))
 		*parent = return_hooker;
 }
-#endif /* CONFIG_DYNAMIC_FTRACE */
 #endif /* CONFIG_FUNCTION_GRAPH_TRACER */
