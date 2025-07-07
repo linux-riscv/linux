@@ -91,18 +91,8 @@
 	REG_L	a0, TASK_TI_A0(tp)
 .endm
 
-
-SYM_CODE_START(handle_exception)
-	/*
-	 * If coming from userspace, preserve the user thread pointer and load
-	 * the kernel thread pointer.  If we came from the kernel, the scratch
-	 * register will contain 0, and we should continue on the current TP.
-	 */
-	csrrw tp, CSR_SCRATCH, tp
-	bnez tp, .Lsave_context
-
-.Lrestore_kernel_tpsp:
-	csrr tp, CSR_SCRATCH
+SYM_CODE_START(handle_kernel_exception)
+	csrw CSR_SCRATCH, tp
 
 #ifdef CONFIG_64BIT
 	/*
@@ -126,8 +116,22 @@ SYM_CODE_START(handle_exception)
 	bnez sp, handle_kernel_stack_overflow
 	REG_L sp, TASK_TI_KERNEL_SP(tp)
 #endif
+	j handle_exception
+ASM_NOKPROBE(handle_kernel_exception)
+SYM_CODE_END(handle_kernel_exception)
 
-.Lsave_context:
+SYM_CODE_START(handle_user_exception)
+	/*
+	 * If coming from userspace, preserve the user thread pointer and load
+	 * the kernel thread pointer.
+	 */
+	csrrw tp, CSR_SCRATCH, tp
+	j handle_exception
+
+SYM_CODE_END(handle_user_exception)
+ASM_NOKPROBE(handle_user_exception)
+
+SYM_CODE_START_NOALIGN(handle_exception)
 	REG_S sp, TASK_TI_USER_SP(tp)
 	REG_L sp, TASK_TI_KERNEL_SP(tp)
 	addi sp, sp, -(PT_SIZE_ON_STACK)
@@ -158,11 +162,15 @@ SYM_CODE_START(handle_exception)
 	REG_S s4, PT_CAUSE(sp)
 	REG_S s5, PT_TP(sp)
 
-	/*
-	 * Set the scratch register to 0, so that if a recursive exception
-	 * occurs, the exception vector knows it came from the kernel
-	 */
-	csrw CSR_SCRATCH, x0
+	REG_L s0, TASK_TI_CPU(tp)
+	slli s0, s0, 3
+	la s1, __per_cpu_offset
+	add s1, s1, s0
+	REG_L s1, 0(s1)
+
+	csrw CSR_SCRATCH, s1
+	la s1, handle_kernel_exception
+	csrw CSR_TVEC, s1
 
 	/* Load the global pointer */
 	load_global_pointer
@@ -236,6 +244,8 @@ SYM_CODE_START_NOALIGN(ret_from_exception)
 	 * structures again.
 	 */
 	csrw CSR_SCRATCH, tp
+	la a0, handle_user_exception
+	csrw CSR_TVEC, a0
 1:
 #ifdef CONFIG_RISCV_ISA_V_PREEMPTIVE
 	move a0, sp

@@ -188,14 +188,9 @@ secondary_start_sbi:
 .align 2
 .Lsetup_trap_vector:
 	/* Set trap vector to exception handler */
-	la a0, handle_exception
+	la a0, handle_kernel_exception
 	csrw CSR_TVEC, a0
 
-	/*
-	 * Set sup0 scratch register to 0, indicating to exception vector that
-	 * we are presently executing in kernel.
-	 */
-	csrw CSR_SCRATCH, zero
 	ret
 
 SYM_CODE_END(_start)

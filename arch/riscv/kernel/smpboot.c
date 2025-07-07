@@ -41,6 +41,11 @@
 
 static DECLARE_COMPLETION(cpu_running);
 
+void __init smp_prepare_boot_cpu(void)
+{
+	set_my_cpu_offset(per_cpu_offset(smp_processor_id()));
+}
+
 void __init smp_prepare_cpus(unsigned int max_cpus)
 {
 	int cpuid;
@@ -224,6 +229,8 @@ asmlinkage __visible void smp_callin(void)
 	/* All kernel threads share the same mm context.  */
 	mmgrab(mm);
 	current->active_mm = mm;
+
+	set_my_cpu_offset(per_cpu_offset(curr_cpuid));
 
 	store_cpu_topology(curr_cpuid);
 	notify_cpu_starting(curr_cpuid);
