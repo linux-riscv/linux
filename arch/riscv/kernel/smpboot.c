@@ -41,6 +41,11 @@
 
 static DECLARE_COMPLETION(cpu_running);
 
+void __init smp_prepare_boot_cpu(void)
+{
+	current_thread_info()->percpu_offset = per_cpu_offset(smp_processor_id());
+}
+
 void __init smp_prepare_cpus(unsigned int max_cpus)
 {
 	int cpuid;
@@ -183,6 +188,7 @@ int __cpu_up(unsigned int cpu, struct task_struct *tidle)
 {
 	int ret = 0;
 	tidle->thread_info.cpu = cpu;
+	tidle->thread_info.percpu_offset = per_cpu_offset(cpu);
 
 	ret = start_secondary_cpu(cpu, tidle);
 	if (!ret) {

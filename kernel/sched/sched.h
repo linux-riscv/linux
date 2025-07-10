@@ -2199,6 +2199,7 @@ static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
 	 */
 	smp_wmb();
 	WRITE_ONCE(task_thread_info(p)->cpu, cpu);
+	WRITE_ONCE(task_thread_info(p)->percpu_offset, per_cpu_offset(cpu));
 	p->wake_cpu = cpu;
 #endif
 }

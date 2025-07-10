@@ -60,8 +60,9 @@ struct thread_info {
 	 */
 	long			kernel_sp;	/* Kernel stack pointer */
 	long			user_sp;	/* User stack pointer */
-	int			cpu;
+	int			cpu;		// TODO: could be packed better
 	unsigned long		syscall_work;	/* SYSCALL_WORK_ flags */
+	unsigned long		percpu_offset;	// XXX: randomly placed here
 #ifdef CONFIG_SHADOW_CALL_STACK
 	void			*scs_base;
 	void			*scs_sp;
