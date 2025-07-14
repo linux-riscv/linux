@@ -53,17 +53,6 @@ union efi_rts_args {
 	} SET_TIME;
 
 	struct {
-		efi_bool_t	*enabled;
-		efi_bool_t	*pending;
-		efi_time_t	*time;
-	} GET_WAKEUP_TIME;
-
-	struct {
-		efi_bool_t	enable;
-		efi_time_t	*time;
-	} SET_WAKEUP_TIME;
-
-	struct {
 		efi_char16_t	*name;
 		efi_guid_t	*vendor;
 		u32		*attr;
@@ -91,10 +80,6 @@ union efi_rts_args {
 		u64		*remaining_space;
 		u64		*max_variable_size;
 	} QUERY_VARIABLE_INFO;
-
-	struct {
-		u32		*high_count;
-	} GET_NEXT_HIGH_MONO_COUNT;
 
 	struct {
 		efi_capsule_header_t **capsules;
@@ -232,17 +217,6 @@ static void __nocfi efi_call_rts(struct work_struct *work)
 		status = efi_call_virt(set_time,
 				       args->SET_TIME.time);
 		break;
-	case EFI_GET_WAKEUP_TIME:
-		status = efi_call_virt(get_wakeup_time,
-				       args->GET_WAKEUP_TIME.enabled,
-				       args->GET_WAKEUP_TIME.pending,
-				       args->GET_WAKEUP_TIME.time);
-		break;
-	case EFI_SET_WAKEUP_TIME:
-		status = efi_call_virt(set_wakeup_time,
-				       args->SET_WAKEUP_TIME.enable,
-				       args->SET_WAKEUP_TIME.time);
-		break;
 	case EFI_GET_VARIABLE:
 		status = efi_call_virt(get_variable,
 				       args->GET_VARIABLE.name,
@@ -271,10 +245,6 @@ static void __nocfi efi_call_rts(struct work_struct *work)
 				       args->QUERY_VARIABLE_INFO.storage_space,
 				       args->QUERY_VARIABLE_INFO.remaining_space,
 				       args->QUERY_VARIABLE_INFO.max_variable_size);
-		break;
-	case EFI_GET_NEXT_HIGH_MONO_COUNT:
-		status = efi_call_virt(get_next_high_mono_count,
-				       args->GET_NEXT_HIGH_MONO_COUNT.high_count);
 		break;
 	case EFI_UPDATE_CAPSULE:
 		status = efi_call_virt(update_capsule,
@@ -362,30 +332,6 @@ static efi_status_t virt_efi_set_time(efi_time_t *tm)
 	if (down_interruptible(&efi_runtime_lock))
 		return EFI_ABORTED;
 	status = efi_queue_work(SET_TIME, tm);
-	up(&efi_runtime_lock);
-	return status;
-}
-
-static efi_status_t virt_efi_get_wakeup_time(efi_bool_t *enabled,
-					     efi_bool_t *pending,
-					     efi_time_t *tm)
-{
-	efi_status_t status;
-
-	if (down_interruptible(&efi_runtime_lock))
-		return EFI_ABORTED;
-	status = efi_queue_work(GET_WAKEUP_TIME, enabled, pending, tm);
-	up(&efi_runtime_lock);
-	return status;
-}
-
-static efi_status_t virt_efi_set_wakeup_time(efi_bool_t enabled, efi_time_t *tm)
-{
-	efi_status_t status;
-
-	if (down_interruptible(&efi_runtime_lock))
-		return EFI_ABORTED;
-	status = efi_queue_work(SET_WAKEUP_TIME, enabled, tm);
 	up(&efi_runtime_lock);
 	return status;
 }
@@ -488,17 +434,6 @@ virt_efi_query_variable_info_nb(u32 attr, u64 *storage_space,
 	return status;
 }
 
-static efi_status_t virt_efi_get_next_high_mono_count(u32 *count)
-{
-	efi_status_t status;
-
-	if (down_interruptible(&efi_runtime_lock))
-		return EFI_ABORTED;
-	status = efi_queue_work(GET_NEXT_HIGH_MONO_COUNT, count);
-	up(&efi_runtime_lock);
-	return status;
-}
-
 static void __nocfi
 virt_efi_reset_system(int reset_type, efi_status_t status,
 		      unsigned long data_size, efi_char16_t *data)
@@ -556,13 +491,10 @@ void __init efi_native_runtime_setup(void)
 {
 	efi.get_time			    = virt_efi_get_time;
 	efi.set_time			    = virt_efi_set_time;
-	efi.get_wakeup_time		    = virt_efi_get_wakeup_time;
-	efi.set_wakeup_time		    = virt_efi_set_wakeup_time;
 	efi.get_variable		    = virt_efi_get_variable;
 	efi.get_next_variable		    = virt_efi_get_next_variable;
 	efi.set_variable		    = virt_efi_set_variable;
 	efi.set_variable_nonblocking	    = virt_efi_set_variable_nb;
-	efi.get_next_high_mono_count	    = virt_efi_get_next_high_mono_count;
 	efi.reset_system 		    = virt_efi_reset_system;
 	efi.query_variable_info		    = virt_efi_query_variable_info;
 	efi.query_variable_info_nonblocking = virt_efi_query_variable_info_nb;
