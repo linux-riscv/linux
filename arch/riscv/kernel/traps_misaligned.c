@@ -602,14 +602,6 @@ void check_vector_unaligned_access_emulated(struct work_struct *work __always_un
 	*mas_ptr = RISCV_HWPROBE_MISALIGNED_VECTOR_UNKNOWN;
 
 	kernel_vector_begin();
-	/*
-	 * In pre-13.0.0 versions of GCC, vector registers cannot appear in
-	 * the clobber list. This inline asm clobbers v0, but since we do not
-	 * currently build the kernel with V enabled, the v0 clobber arg is not
-	 * needed (as the compiler will not emit vector code itself). If the kernel
-	 * is changed to build with V enabled, the clobber arg will need to be
-	 * added here.
-	 */
 	__asm__ __volatile__ (
 		".balign 4\n\t"
 		".option push\n\t"
@@ -617,7 +609,7 @@ void check_vector_unaligned_access_emulated(struct work_struct *work __always_un
 		"       vsetivli zero, 1, e16, m1, ta, ma\n\t"	// Vectors of 16b
 		"       vle16.v v0, (%[ptr])\n\t"		// Load bytes
 		".option pop\n\t"
-		: : [ptr] "r" ((u8 *)&tmp_var + 1));
+		: : [ptr] "r" ((u8 *)&tmp_var + 1) : CLOBBER_V0 );
 	kernel_vector_end();
 }
 

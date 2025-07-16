@@ -40,6 +40,8 @@
 	_res;								\
 })
 
+#define CLOBBER_V0 "v0"
+
 extern unsigned long riscv_v_vsize;
 int riscv_v_setup_vsize(void);
 bool insn_is_vector(u32 insn_buf);
@@ -423,6 +425,7 @@ static inline bool riscv_v_vstate_ctrl_user_allowed(void) { return false; }
 #define riscv_v_thread_free(tsk)		do {} while (0)
 #define  riscv_v_setup_ctx_cache()		do {} while (0)
 #define riscv_v_thread_alloc(tsk)		do {} while (0)
+#define CLOBER_V0
 
 #endif /* CONFIG_RISCV_ISA_V */
 
