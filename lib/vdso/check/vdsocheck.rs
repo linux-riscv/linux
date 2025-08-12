@@ -34,6 +34,18 @@ impl<'a> AllowedRelocations<'a> {
 
 fn allowed_relocations_for_machine(machine: u16) -> Option<AllowedRelocations<'static>> {
     match machine as u32 {
+        bindings::EM_386 => Some(AllowedRelocations {
+            ignored_object_file_sections: None,
+            in_object_file: &[
+                bindings::R_386_PC32,
+                bindings::R_386_GOTOFF,
+                bindings::R_386_GOTPC,
+            ],
+        }),
+        bindings::EM_X86_64 => Some(AllowedRelocations {
+            ignored_object_file_sections: None,
+            in_object_file: &[bindings::R_X86_64_PC32, bindings::R_X86_64_PLT32],
+        }),
         _ => None,
     }
 }
