@@ -55,6 +55,7 @@ config HAVE_VDSOCHECK
 	default y if ARM
 	default y if ARM64
 	default y if PPC
+	default y if RISCV
 	help
 	  Selected for architectures that are supported by the 'vdsocheck' progam.
 	  Only transitional.
