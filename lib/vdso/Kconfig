@@ -52,6 +52,7 @@ config GENERIC_VDSO_DATA_STORE
 config HAVE_VDSOCHECK
 	bool
 	default y if X86
+	default y if ARM
 	help
 	  Selected for architectures that are supported by the 'vdsocheck' progam.
 	  Only transitional.

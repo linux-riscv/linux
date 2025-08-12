@@ -46,6 +46,14 @@ fn allowed_relocations_for_machine(machine: u16) -> Option<AllowedRelocations<'s
             ignored_object_file_sections: None,
             in_object_file: &[bindings::R_X86_64_PC32, bindings::R_X86_64_PLT32],
         }),
+        bindings::EM_ARM => Some(AllowedRelocations {
+            ignored_object_file_sections: None,
+            in_object_file: &[
+                bindings::R_ARM_NONE,
+                bindings::R_ARM_REL32,
+                bindings::R_ARM_PREL31,
+            ],
+        }),
         _ => None,
     }
 }
