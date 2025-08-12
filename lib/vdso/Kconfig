@@ -48,17 +48,3 @@ config GENERIC_VDSO_DATA_STORE
 	bool
 	help
 	  Selected by architectures that use the generic vDSO data store.
-
-config HAVE_VDSOCHECK
-	bool
-	default y if X86
-	default y if ARM
-	default y if ARM64
-	default y if PPC
-	default y if RISCV
-	default y if LOONGARCH
-	default y if S390
-	default y if MIPS
-	help
-	  Selected for architectures that are supported by the 'vdsocheck' progam.
-	  Only transitional.
