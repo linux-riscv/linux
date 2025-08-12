@@ -53,6 +53,7 @@ config HAVE_VDSOCHECK
 	bool
 	default y if X86
 	default y if ARM
+	default y if ARM64
 	help
 	  Selected for architectures that are supported by the 'vdsocheck' progam.
 	  Only transitional.
