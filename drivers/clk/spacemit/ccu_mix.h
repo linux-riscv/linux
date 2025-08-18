@@ -130,7 +130,7 @@ static struct ccu_mix _name = {							\
 }
 
 #define CCU_DIV_GATE_DEFINE(_name, _parent, _reg_ctrl, _shift, _width,		\
-			    _mask_gate,	_flags)					\
+			    _mask_gate, _flags)			\
 static struct ccu_mix _name = {							\
 	.gate	= CCU_GATE_INIT(_mask_gate),					\
 	.div	= CCU_DIV_INIT(_shift, _width),					\
