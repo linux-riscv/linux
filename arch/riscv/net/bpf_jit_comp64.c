@@ -1479,20 +1479,25 @@ int bpf_jit_emit_insn(const struct bpf_insn *insn, struct rv_jit_context *ctx,
 
 	/* dst = BSWAP##imm(dst) */
 	case BPF_ALU | BPF_END | BPF_FROM_LE:
-		switch (imm) {
-		case 16:
-			emit_zexth(rd, rd, ctx);
-			break;
-		case 32:
-			if (!aux->verifier_zext)
-				emit_zextw(rd, rd, ctx);
-			break;
-		case 64:
-			/* Do nothing */
-			break;
+	case BPF_ALU | BPF_END | BPF_FROM_BE:
+		if (alu_end_should_swap(code)) {
+			emit_bswap(rd, imm, ctx);
+		} else {
+			switch (imm) {
+			case 16:
+				emit_zexth(rd, rd, ctx);
+				break;
+			case 32:
+				if (!aux->verifier_zext)
+					emit_zextw(rd, rd, ctx);
+				break;
+			case 64:
+				/* Do nothing */
+				break;
+			}
 		}
 		break;
-	case BPF_ALU | BPF_END | BPF_FROM_BE:
+
 	case BPF_ALU64 | BPF_END | BPF_FROM_LE:
 		emit_bswap(rd, imm, ctx);
 		break;

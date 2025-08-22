@@ -28,6 +28,12 @@ static inline bool rvzbb_enabled(void)
 	return IS_ENABLED(CONFIG_RISCV_ISA_ZBB) && riscv_has_extension_likely(RISCV_ISA_EXT_ZBB);
 }
 
+static inline bool alu_end_should_swap(u32 code)
+{
+	u32 endian = IS_ENABLED(CONFIG_CPU_BIG_ENDIAN) ? BPF_FROM_BE : BPF_FROM_LE;
+	return (code & BPF_FROM_BE) != endian;
+}
+
 enum {
 	RV_REG_ZERO =	0,	/* The constant value 0 */
 	RV_REG_RA =	1,	/* Return address */
@@ -117,10 +123,8 @@ static inline void bpf_flush_icache(void *start, void *end)
 /* Emit a 4-byte riscv instruction. */
 static inline void emit(const u32 insn, struct rv_jit_context *ctx)
 {
-	if (ctx->insns) {
-		ctx->insns[ctx->ninsns] = insn;
-		ctx->insns[ctx->ninsns + 1] = (insn >> 16);
-	}
+	if (ctx->insns)
+		put_unaligned_le32(insn, ctx->insns+ctx->ninsns);
 
 	ctx->ninsns += 2;
 }
@@ -131,7 +135,7 @@ static inline void emitc(const u16 insn, struct rv_jit_context *ctx)
 	BUILD_BUG_ON(!rvc_enabled());
 
 	if (ctx->insns)
-		ctx->insns[ctx->ninsns] = insn;
+		ctx->insns[ctx->ninsns] = cpu_to_le16(insn);
 
 	ctx->ninsns++;
 }
