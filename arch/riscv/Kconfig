@@ -436,6 +436,28 @@ choice
 		bool "medium any code model"
 endchoice
 
+choice
+	prompt "Data endian"
+	default CPU_LITTLE_ENDIAN
+	help
+	  Configure the endiannes of data access performed by the CPU.
+	  This will require system to be booted from M mode in big endian
+	  and the userland to be compiled for the same endian-ness.
+
+config CPU_BIG_ENDIAN
+	bool "Build big-endian kernel"
+	depends on EXPERT
+	help
+	  Say Y if you want to run big-endian kernel and userspace
+	  Set for expert as this experimental
+
+config CPU_LITTLE_ENDIAN
+       bool "Build little-endian kernel (default)"
+       help
+	  Say  Y if you want to run little-endian kernel and userspace
+	  This is the default for most distributions
+endchoice
+
 config MODULE_SECTIONS
 	bool
 	select HAVE_MOD_ARCH_SPECIFIC

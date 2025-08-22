@@ -21,6 +21,11 @@ else
 endif
 endif
 
+ifeq ($(CONFIG_CPU_BIG_ENDIAN),y)
+KBUILD_CPPFLAGS	+= -mbig-endian -D__RISCVEB__
+CHECKFLAGS	+= -D__RISCVEB__
+endif
+
 ifeq ($(CONFIG_CMODEL_MEDLOW),y)
 KBUILD_CFLAGS_MODULE += -mcmodel=medany
 endif
@@ -28,12 +33,16 @@ endif
 export BITS
 ifeq ($(CONFIG_ARCH_RV64I),y)
 	BITS := 64
-	UTS_MACHINE := riscv64
+	ifeq ($(CONFIG_CPU_BIG_ENDIAN),y)
+		UTS_MACHINE := riscv64_be
+		KBUILD_LDFLAGS += -melf64briscv
+	else	
+		UTS_MACHINE := riscv64
+		KBUILD_LDFLAGS += -melf64lriscv
+	endif
 
 	KBUILD_CFLAGS += -mabi=lp64
 	KBUILD_AFLAGS += -mabi=lp64
-
-	KBUILD_LDFLAGS += -melf64lriscv
 
 	KBUILD_RUSTFLAGS += -Ctarget-cpu=generic-rv64 --target=riscv64imac-unknown-none-elf \
 			    -Cno-redzone
