@@ -15,4 +15,9 @@ enum probe_insn {
 enum probe_insn __kprobes
 riscv_probe_decode_insn(probe_opcode_t *addr, struct arch_probe_insn *asi);
 
+static inline int read_insn_length(void *ptr)
+{
+	return GET_INSN_LENGTH(le16_to_cpu(*(__le16 *)ptr));
+}
+
 #endif /* _RISCV_KERNEL_KPROBES_DECODE_INSN_H */

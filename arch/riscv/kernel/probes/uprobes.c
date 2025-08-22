@@ -12,9 +12,9 @@
 bool is_swbp_insn(uprobe_opcode_t *insn)
 {
 #ifdef CONFIG_RISCV_ISA_C
-	return (*insn & 0xffff) == UPROBE_SWBP_INSN;
+	return (*(u16 *)insn) == cpu_to_le16(UPROBE_SWBP_INSN);
 #else
-	return *insn == UPROBE_SWBP_INSN;
+	return *insn == cpu_to_le32(UPROBE_SWBP_INSN);
 #endif
 }
 
@@ -35,7 +35,7 @@ int arch_uprobe_analyze_insn(struct arch_uprobe *auprobe, struct mm_struct *mm,
 
 	opcode = *(probe_opcode_t *)(&auprobe->insn[0]);
 
-	auprobe->insn_size = GET_INSN_LENGTH(opcode);
+	auprobe->insn_size = GET_INSN_LENGTH(le32_to_cpu(opcode));
 
 	switch (riscv_probe_decode_insn(&opcode, &auprobe->api)) {
 	case INSN_REJECTED:
@@ -173,8 +173,8 @@ void arch_uprobe_copy_ixol(struct page *page, unsigned long vaddr,
 
 	/* Add ebreak behind opcode to simulate singlestep */
 	if (vaddr) {
-		dst += GET_INSN_LENGTH(*(probe_opcode_t *)src);
-		*(uprobe_opcode_t *)dst = __BUG_INSN_32;
+		dst += read_insn_length(src);
+		*(uprobe_opcode_t *)dst = cpu_to_le32(__BUG_INSN_32);
 	}
 
 	flush_icache_range(start, start + len);

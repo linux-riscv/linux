@@ -24,13 +24,13 @@ post_kprobe_handler(struct kprobe *, struct kprobe_ctlblk *, struct pt_regs *);
 
 static void __kprobes arch_prepare_ss_slot(struct kprobe *p)
 {
-	size_t len = GET_INSN_LENGTH(p->opcode);
-	u32 insn = __BUG_INSN_32;
+	size_t len = read_insn_length(&p->opcode);
+	u32 insn = cpu_to_le32(__BUG_INSN_32);
 
 	p->ainsn.api.restore = (unsigned long)p->addr + len;
 
 	patch_text_nosync(p->ainsn.api.insn, &p->opcode, len);
-	patch_text_nosync((void *)p->ainsn.api.insn + len, &insn, GET_INSN_LENGTH(insn));
+	patch_text_nosync((void *)p->ainsn.api.insn + len, &insn, GET_INSN_LENGTH(__BUG_INSN_32));
 }
 
 static void __kprobes arch_prepare_simulate(struct kprobe *p)
@@ -58,7 +58,7 @@ static bool __kprobes arch_check_kprobe(struct kprobe *p)
 		if (tmp == addr)
 			return true;
 
-		tmp += GET_INSN_LENGTH(*(u16 *)tmp);
+		tmp += read_insn_length((u16 *)tmp);
 	}
 
 	return false;
@@ -75,9 +75,9 @@ int __kprobes arch_prepare_kprobe(struct kprobe *p)
 		return -EILSEQ;
 
 	/* copy instruction */
-	p->opcode = (kprobe_opcode_t)(*insn++);
-	if (GET_INSN_LENGTH(p->opcode) == 4)
-		p->opcode |= (kprobe_opcode_t)(*insn) << 16;
+	*((u16 *)&p->opcode) = (*insn++);
+	if (read_insn_length(&p->opcode) == 4)
+		p->opcode = (kprobe_opcode_t)(*(u32 *)p->addr);
 
 	/* decode instruction */
 	switch (riscv_probe_decode_insn(p->addr, &p->ainsn.api)) {
@@ -107,16 +107,24 @@ int __kprobes arch_prepare_kprobe(struct kprobe *p)
 /* install breakpoint in text */
 void __kprobes arch_arm_kprobe(struct kprobe *p)
 {
-	size_t len = GET_INSN_LENGTH(p->opcode);
-	u32 insn = len == 4 ? __BUG_INSN_32 : __BUG_INSN_16;
+	size_t len = read_insn_length(&p->opcode);
+	u32 insn;
 
+	if (len == 4)
+		insn = cpu_to_le32(__BUG_INSN_32);
+	else {
+		insn = cpu_to_le16(__BUG_INSN_16);
+		insn |= cpu_to_le16(__BUG_INSN_16) << 16;
+	}
+
+	pr_info("%s: patching %px (%d bytes)\n", __func__, p->addr, (int)len);
 	patch_text(p->addr, &insn, len);
 }
 
 /* remove breakpoint from text */
 void __kprobes arch_disarm_kprobe(struct kprobe *p)
 {
-	size_t len = GET_INSN_LENGTH(p->opcode);
+	size_t len = read_insn_length(&p->opcode);
 
 	patch_text(p->addr, &p->opcode, len);
 }
@@ -336,7 +344,7 @@ kprobe_single_step_handler(struct pt_regs *regs)
 	struct kprobe *cur = kprobe_running();
 
 	if (cur && (kcb->kprobe_status & (KPROBE_HIT_SS | KPROBE_REENTER)) &&
-	    ((unsigned long)&cur->ainsn.api.insn[0] + GET_INSN_LENGTH(cur->opcode) == addr)) {
+	    ((unsigned long)&cur->ainsn.api.insn[0] + read_insn_length(&cur->opcode) == addr)) {
 		kprobes_restore_local_irqflag(kcb, regs);
 		post_kprobe_handler(cur, kcb, regs);
 		return true;
