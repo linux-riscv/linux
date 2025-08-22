@@ -484,6 +484,7 @@ static int kvm_riscv_vcpu_general_get_csr(struct kvm_vcpu *vcpu,
 					  unsigned long reg_num,
 					  unsigned long *out_val)
 {
+	struct kvm_cpu_context *cntx = &vcpu->arch.guest_context;
 	struct kvm_vcpu_csr *csr = &vcpu->arch.guest_csr;
 
 	if (reg_num >= sizeof(struct kvm_riscv_csr) / sizeof(unsigned long))
@@ -493,6 +494,8 @@ static int kvm_riscv_vcpu_general_get_csr(struct kvm_vcpu *vcpu,
 		kvm_riscv_vcpu_flush_interrupts(vcpu);
 		*out_val = (csr->hvip >> VSIP_TO_HVIP_SHIFT) & VSIP_VALID_MASK;
 		*out_val |= csr->hvip & ~IRQ_LOCAL_MASK;
+	} else if (reg_num == KVM_REG_RISCV_CSR_REG(hstatus)) {
+		*out_val = cntx->hstatus;
 	} else
 		*out_val = ((unsigned long *)csr)[reg_num];
 
@@ -503,6 +506,7 @@ static int kvm_riscv_vcpu_general_set_csr(struct kvm_vcpu *vcpu,
 					  unsigned long reg_num,
 					  unsigned long reg_val)
 {
+	struct kvm_cpu_context *cntx = &vcpu->arch.guest_context;
 	struct kvm_vcpu_csr *csr = &vcpu->arch.guest_csr;
 
 	if (reg_num >= sizeof(struct kvm_riscv_csr) / sizeof(unsigned long))
@@ -511,6 +515,11 @@ static int kvm_riscv_vcpu_general_set_csr(struct kvm_vcpu *vcpu,
 	if (reg_num == KVM_REG_RISCV_CSR_REG(sip)) {
 		reg_val &= VSIP_VALID_MASK;
 		reg_val <<= VSIP_TO_HVIP_SHIFT;
+	} else if (reg_num == KVM_REG_RISCV_CSR_REG(hstatus)) {
+		/* for now only allow the S level endianness */
+		cntx->hstatus &= ~HSTATUS_VSBE;
+		cntx->hstatus |= reg_val & HSTATUS_VSBE;
+		return 0;
 	}
 
 	((unsigned long *)csr)[reg_num] = reg_val;
