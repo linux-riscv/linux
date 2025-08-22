@@ -8,8 +8,13 @@
 #ifndef _ASM_RISCV_WORD_AT_A_TIME_H
 #define _ASM_RISCV_WORD_AT_A_TIME_H
 
-
 #include <asm/asm-extable.h>
+
+#if (defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__)
+/* use the generic one for big-endian */
+#include <asm-generic/word-at-a-time.h>
+#else
+
 #include <linux/bitops.h>
 #include <linux/wordpart.h>
 
@@ -46,6 +51,10 @@ static inline unsigned long find_zero(unsigned long mask)
 
 /* The mask we created is directly usable as a bytemask */
 #define zero_bytemask(mask) (mask)
+
+#endif /* little endian case*/
+
+
 
 #ifdef CONFIG_DCACHE_WORD_ACCESS
 
