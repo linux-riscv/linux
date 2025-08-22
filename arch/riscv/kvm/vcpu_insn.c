@@ -453,6 +453,8 @@ int kvm_riscv_vcpu_virtual_insn(struct kvm_vcpu *vcpu, struct kvm_run *run,
 				kvm_riscv_vcpu_trap_redirect(vcpu, &utrap);
 				return 1;
 			}
+
+			insn = le32_to_cpu(insn);
 		}
 		if (INSN_IS_16BIT(insn))
 			return truly_illegal_insn(vcpu, run, insn);
@@ -509,6 +511,8 @@ int kvm_riscv_vcpu_mmio_load(struct kvm_vcpu *vcpu, struct kvm_run *run,
 			kvm_riscv_vcpu_trap_redirect(vcpu, &utrap);
 			return 1;
 		}
+
+		insn = le32_to_cpu(insn);
 		insn_len = INSN_LEN(insn);
 	}
 
@@ -635,6 +639,8 @@ int kvm_riscv_vcpu_mmio_store(struct kvm_vcpu *vcpu, struct kvm_run *run,
 			kvm_riscv_vcpu_trap_redirect(vcpu, &utrap);
 			return 1;
 		}
+
+		insn = le32_to_cpu(insn);
 		insn_len = INSN_LEN(insn);
 	}
 
