@@ -299,6 +299,7 @@ static inline int get_insn(struct pt_regs *regs, ulong epc, ulong *r_insn)
 		 * below with the upper 16 bits half.
 		 */
 		insn &= GENMASK(15, 0);
+		insn = le16_to_cpu(insn);
 		if ((insn & __INSN_LENGTH_MASK) != __INSN_LENGTH_32) {
 			*r_insn = insn;
 			return 0;
@@ -306,12 +307,14 @@ static inline int get_insn(struct pt_regs *regs, ulong epc, ulong *r_insn)
 		epc += sizeof(u16);
 		if (__read_insn(regs, tmp, epc, u16))
 			return -EFAULT;
+		tmp = le16_to_cpu(tmp);
 		*r_insn = (tmp << 16) | insn;
 
 		return 0;
 	} else {
 		if (__read_insn(regs, insn, epc, u32))
 			return -EFAULT;
+		insn = le32_to_cpu(insn);
 		if ((insn & __INSN_LENGTH_MASK) == __INSN_LENGTH_32) {
 			*r_insn = insn;
 			return 0;

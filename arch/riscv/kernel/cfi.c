@@ -37,15 +37,16 @@ static bool decode_cfi_insn(struct pt_regs *regs, unsigned long *target,
 	 */
 	if (get_kernel_nofault(insn, (void *)regs->epc - 4))
 		return false;
+	insn = le32_to_cpu(insn);
 	if (!riscv_insn_is_beq(insn))
 		return false;
-
 	*type = (u32)regs_ptr[RV_EXTRACT_RS1_REG(insn)];
 
 	if (get_kernel_nofault(insn, (void *)regs->epc) ||
 	    get_kernel_nofault(insn, (void *)regs->epc + GET_INSN_LENGTH(insn)))
 		return false;
 
+	insn = le32_to_cpu(insn);
 	if (riscv_insn_is_jalr(insn))
 		rs1_num = RV_EXTRACT_RS1_REG(insn);
 	else if (riscv_insn_is_c_jalr(insn))

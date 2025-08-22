@@ -62,11 +62,16 @@ static void riscv_fill_cpu_mfr_info(struct cpu_manufacturer_info_t *cpu_mfr_info
 	}
 }
 
+static u32 get_u16(u16 *ptr)
+{
+	return le16_to_cpu(*ptr);
+}
+
 static u32 riscv_instruction_at(void *p)
 {
 	u16 *parcel = p;
 
-	return (u32)parcel[0] | (u32)parcel[1] << 16;
+	return (u32)get_u16(parcel+0) | (u32)get_u16(parcel+1) << 16;
 }
 
 static void riscv_alternative_fix_auipc_jalr(void *ptr, u32 auipc_insn,
@@ -83,6 +88,8 @@ static void riscv_alternative_fix_auipc_jalr(void *ptr, u32 auipc_insn,
 	riscv_insn_insert_utype_itype_imm(&call[0], &call[1], imm);
 
 	/* patch the call place again */
+	call[0] = cpu_to_le32(call[0]);
+	call[1] = cpu_to_le32(call[1]);
 	patch_text_nosync(ptr, call, sizeof(u32) * 2);
 }
 
@@ -98,6 +105,7 @@ static void riscv_alternative_fix_jal(void *ptr, u32 jal_insn, int patch_offset)
 	riscv_insn_insert_jtype_imm(&jal_insn, imm);
 
 	/* patch the call place again */
+	jal_insn = cpu_to_le32(jal_insn);
 	patch_text_nosync(ptr, &jal_insn, sizeof(u32));
 }
 

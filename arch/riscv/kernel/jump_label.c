@@ -19,7 +19,7 @@ bool arch_jump_label_transform_queue(struct jump_entry *entry,
 				     enum jump_label_type type)
 {
 	void *addr = (void *)jump_entry_code(entry);
-	u32 insn;
+	__le32 insn;
 
 	if (type == JUMP_LABEL_JMP) {
 		long offset = jump_entry_target(entry) - jump_entry_code(entry);
@@ -35,6 +35,9 @@ bool arch_jump_label_transform_queue(struct jump_entry *entry,
 	} else {
 		insn = RISCV_INSN_NOP4;
 	}
+
+
+	insn = cpu_to_le32(insn);
 
 	if (early_boot_irqs_disabled) {
 		riscv_patch_in_stop_machine = 1;

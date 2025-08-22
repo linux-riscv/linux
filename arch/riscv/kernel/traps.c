@@ -263,6 +263,7 @@ static inline unsigned long get_break_insn_length(unsigned long pc)
 	if (get_kernel_nofault(insn, (bug_insn_t *)pc))
 		return 0;
 
+	insn = le32_to_cpu(insn);
 	return GET_INSN_LENGTH(insn);
 }
 
@@ -411,6 +412,7 @@ int is_valid_bugaddr(unsigned long pc)
 		return 0;
 	if (get_kernel_nofault(insn, (bug_insn_t *)pc))
 		return 0;
+	insn = cpu_to_le32(insn);
 	if ((insn & __INSN_LENGTH_MASK) == __INSN_LENGTH_32)
 		return (insn == __BUG_INSN_32);
 	else
