@@ -144,6 +144,8 @@ void start_thread(struct pt_regs *regs, unsigned long pc,
 	unsigned long sp)
 {
 	regs->status = SR_PIE;
+	if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN))
+		regs->status |= SR_UBE;
 	if (has_fpu()) {
 		regs->status |= SR_FS_INITIAL;
 		/*

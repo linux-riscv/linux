@@ -13,6 +13,7 @@
 #define SR_SIE		_AC(0x00000002, UL) /* Supervisor Interrupt Enable */
 #define SR_MIE		_AC(0x00000008, UL) /* Machine Interrupt Enable */
 #define SR_SPIE		_AC(0x00000020, UL) /* Previous Supervisor IE */
+#define SR_UBE		_AC(0x00000040, UL) /* User mode is big-endian */
 #define SR_MPIE		_AC(0x00000080, UL) /* Previous Machine IE */
 #define SR_SPP		_AC(0x00000100, UL) /* Previously Supervisor */
 #define SR_MPP		_AC(0x00001800, UL) /* Previously Machine */
