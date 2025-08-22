@@ -256,17 +256,10 @@
 	INSN_S(OPCODE_OP_IMM, FUNC3(6), __RS2(3),		\
 	       SIMM12((offset) & 0xfe0), RS1(base))
 
-#ifndef CONFIG_AS_HAS_INSN
-#define RISCV_PAUSE	".4byte 0x100000f"
-#define ZAWRS_WRS_NTO	".4byte 0x00d00073"
-#define ZAWRS_WRS_STO	".4byte 0x01d00073"
-#define RISCV_NOP4	".4byte 0x00000013"
-#else
-#define RISCV_PAUSE	".insn 0x100000f"
-#define ZAWRS_WRS_NTO	".insn 0x00d00073"
-#define ZAWRS_WRS_STO	".insn 0x01d00073"
-#define RISCV_NOP4	".insn 0x00000013"
-#endif
+#define RISCV_PAUSE	ASM_INSN("0x100000f")
+#define ZAWRS_WRS_NTO	ASM_INSN("0x00d00073")
+#define ZAWRS_WRS_STO	ASM_INSN("0x01d00073")
+#define RISCV_NOP4	ASM_INSN("0x00000013")
 
 #define RISCV_INSN_NOP4	_AC(0x00000013, U)
 
