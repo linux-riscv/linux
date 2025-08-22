@@ -75,6 +75,10 @@ static void kvm_riscv_vcpu_context_reset(struct kvm_vcpu *vcpu,
 	cntx->hstatus |= HSTATUS_VTW;
 	cntx->hstatus |= HSTATUS_SPVP;
 	cntx->hstatus |= HSTATUS_SPV;
+
+	/* If configured big-endian, start guest in big endian */
+	if (IS_ENABLED(CONFIG_CPU_BIG_ENDIAN))
+		cntx->hstatus |= HSTATUS_VSBE;
 }
 
 static void kvm_riscv_reset_vcpu(struct kvm_vcpu *vcpu, bool kvm_sbi_reset)
