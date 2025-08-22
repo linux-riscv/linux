@@ -6,6 +6,18 @@
 #include <asm/hwcap.h>
 #include <asm/alternative-macros.h>
 
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define M_SLL sll
+#define M_SRL srl
+#else
+	/* in big-endian, swap the direction of shifts to deal
+	 * with the fact the order of bytes in a word has changed
+	 * from ABCD to DCBA.
+	 */
+#define M_SLL srl
+#define M_SRL sll
+#endif
+
 	.macro fixup op reg addr lbl
 100:
 	\op \reg, \addr
@@ -178,10 +190,10 @@ SYM_FUNC_START(fallback_scalar_usercopy_sum_enabled)
 	 */
 
 	/* At least one iteration will be executed */
-	srl	a4, a5, t3
+	M_SRL	a4, a5, t3
 	fixup REG_L   a5, SZREG(a1), 10f
 	addi	a1, a1, SZREG
-	sll	a2, a5, t4
+	M_SLL	a2, a5, t4
 	or	a2, a2, a4
 	fixup REG_S   a2, 0(a0), 10f
 	addi	a0, a0, SZREG

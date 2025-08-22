@@ -6,6 +6,18 @@
 #include <linux/linkage.h>
 #include <asm/asm.h>
 
+#if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+#define M_SLL sll
+#define M_SRL srl
+#else
+	/* in big-endian, swap the direction of shifts to deal
+	 * with the fact the order of bytes in a word has changed
+	 * from ABCD to DCBA.
+	 */
+#define M_SLL srl
+#define M_SRL sll
+#endif
+
 SYM_FUNC_START(__memmove)
 	/*
 	 * Returns
@@ -133,8 +145,8 @@ SYM_FUNC_START(__memmove)
 	1:
 	REG_L t1, (1 * SZREG)(a1)
 	addi  t3, t3, (2 * SZREG)
-	srl   t0, t0, a6
-	sll   t2, t1, a7
+	M_SRL t0, t0, a6
+	M_SLL t2, t1, a7
 	or    t2, t0, t2
 	REG_S t2, ((0 * SZREG) - (2 * SZREG))(t3)
 
@@ -142,8 +154,8 @@ SYM_FUNC_START(__memmove)
 
 	REG_L t0, (2 * SZREG)(a1)
 	addi  a1, a1, (2 * SZREG)
-	srl   t1, t1, a6
-	sll   t2, t0, a7
+	M_SRL t1, t1, a6
+	M_SLL t2, t0, a7
 	or    t2, t1, t2
 	REG_S t2, ((1 * SZREG) - (2 * SZREG))(t3)
 
@@ -195,8 +207,8 @@ SYM_FUNC_START(__memmove)
 	1:
 	REG_L t0, (-1 * SZREG)(a4)
 	addi  t4, t4, (-2 * SZREG)
-	sll   t1, t1, a7
-	srl   t2, t0, a6
+	M_SLL t1, t1, a7
+	M_SRL t2, t0, a6
 	or    t2, t1, t2
 	REG_S t2, ( 1 * SZREG)(t4)
 
@@ -204,8 +216,8 @@ SYM_FUNC_START(__memmove)
 
 	REG_L t1, (-2 * SZREG)(a4)
 	addi  a4, a4, (-2 * SZREG)
-	sll   t0, t0, a7
-	srl   t2, t1, a6
+	M_SLL t0, t0, a7
+	M_SRL t2, t1, a6
 	or    t2, t0, t2
 	REG_S t2, ( 0 * SZREG)(t4)
 
