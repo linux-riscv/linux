@@ -557,6 +557,8 @@ int kvm_riscv_vcpu_mmio_load(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		len = 4;
 		shift = 8 * (sizeof(ulong) - len);
 	} else {
+		pr_err("%s: insn 0x%08lx not decoded at %lx\n",
+		       __func__, insn, vcpu->arch.guest_context.sepc);
 		return -EOPNOTSUPP;
 	}
 
@@ -674,6 +676,8 @@ int kvm_riscv_vcpu_mmio_store(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		len = 4;
 		data32 = GET_RS2C(insn, &vcpu->arch.guest_context);
 	} else {
+		pr_err("%s: insn 0x%08lx not decoded at %lx\n",
+		       __func__, insn, vcpu->arch.guest_context.sepc);
 		return -EOPNOTSUPP;
 	}
 
