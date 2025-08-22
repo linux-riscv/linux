@@ -99,8 +99,8 @@ struct dyn_arch_ftrace {
 do {									\
 	unsigned int offset =						\
 		(unsigned long) (callee) - (unsigned long) (caller);	\
-	call[0] = to_auipc_t0(offset);					\
-	call[1] = to_jalr_t0(offset);					\
+	call[0] = cpu_to_le32(to_auipc_t0(offset));			\
+	call[1] = cpu_to_le32(to_jalr_t0(offset));			\
 } while (0)
 
 /*
