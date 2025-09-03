@@ -315,11 +315,11 @@ asmlinkage __visible __trap_section void do_trap_break(struct pt_regs *regs)
 		local_irq_disable();
 		irqentry_exit_to_user_mode(regs);
 	} else {
-		irqentry_state_t state = irqentry_nmi_enter(regs);
+		irqentry_state_t state = irqentry_enter(regs);
 
 		handle_break(regs);
 
-		irqentry_nmi_exit(regs, state);
+		irqentry_exit(regs, state);
 	}
 }
 
