@@ -179,55 +179,21 @@ fi
 
 # Check that the `libclang` used by the Rust bindings generator is suitable.
 #
-# In order to do that, first invoke `bindgen` to get the `libclang` version
-# found by `bindgen`. This step may already fail if, for instance, `libclang`
-# is not found, thus inform the user in such a case.
-bindgen_libclang_output=$( \
-	LC_ALL=C "$BINDGEN" $(dirname $0)/rust_is_available_bindgen_libclang.h 2>&1 >/dev/null
-) || bindgen_libclang_code=$?
-if [ -n "$bindgen_libclang_code" ]; then
-	echo >&2 "***"
-	echo >&2 "*** Running '$BINDGEN' to check the libclang version (used by the Rust"
-	echo >&2 "*** bindings generator) failed with code $bindgen_libclang_code. This may be caused by"
-	echo >&2 "*** a failure to locate libclang. See output and docs below for details:"
-	echo >&2 "***"
-	echo >&2 "$bindgen_libclang_output"
-	echo >&2 "***"
+# Get the version, and the minimum version check will be performed internally.
+bindgen_libclang_version_output=$( \
+	$(dirname $0)/rust-bindgen-libclang-version.sh --with-non-canonical $BINDGEN
+) || bindgen_libclang_version_code=$?
+if [ -n "$bindgen_libclang_version_code" ]; then
+	# Detailed error messages have already been output in the script we just called.
 	exit 1
 fi
 
-# `bindgen` returned successfully, thus use the output to check that the version
-# of the `libclang` found by the Rust bindings generator is suitable.
-#
-# Unlike other version checks, note that this one does not necessarily appear
-# in the first line of the output, thus no `sed` address is provided.
-bindgen_libclang_version=$( \
-	echo "$bindgen_libclang_output" \
-		| sed -nE 's:.*clang version ([0-9]+\.[0-9]+\.[0-9]+).*:\1:p'
-)
-if [ -z "$bindgen_libclang_version" ]; then
-	echo >&2 "***"
-	echo >&2 "*** Running '$BINDGEN' to check the libclang version (used by the Rust"
-	echo >&2 "*** bindings generator) did not return an expected output. See output"
-	echo >&2 "*** and docs below for details:"
-	echo >&2 "***"
-	echo >&2 "$bindgen_libclang_output"
-	echo >&2 "***"
-	exit 1
-fi
-bindgen_libclang_min_version=$($min_tool_version llvm)
-bindgen_libclang_cversion=$(get_canonical_version $bindgen_libclang_version)
-bindgen_libclang_min_cversion=$(get_canonical_version $bindgen_libclang_min_version)
-if [ "$bindgen_libclang_cversion" -lt "$bindgen_libclang_min_cversion" ]; then
-	echo >&2 "***"
-	echo >&2 "*** libclang (used by the Rust bindings generator '$BINDGEN') is too old."
-	echo >&2 "***   Your version:    $bindgen_libclang_version"
-	echo >&2 "***   Minimum version: $bindgen_libclang_min_version"
-	echo >&2 "***"
-	exit 1
-fi
-
-if [ "$bindgen_libclang_cversion" -ge 1900100 ] &&
+# Getting the version successfully, thus use the output to check that the
+# version of the `libclang` found by the Rust bindings generator is suitable.
+readarray -t bindgen_libclang_version_array <<<"$bindgen_libclang_version_output"
+bindgen_libclang_version=${bindgen_libclang_version_array[1]}
+bindgen_libclang_cversion=${bindgen_libclang_version_array[0]}
+if [ "$bindgen_libclang_cversion" -ge 190100 ] &&
 	[ "$rust_bindings_generator_cversion" -lt 6905 ]; then
 	# Distributions may have patched the issue (e.g. Debian did).
 	if ! "$BINDGEN" $(dirname $0)/rust_is_available_bindgen_libclang_concat.h | grep -q foofoo; then
