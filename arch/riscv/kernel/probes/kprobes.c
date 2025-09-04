@@ -115,7 +115,7 @@ void __kprobes arch_arm_kprobe(struct kprobe *p)
 	size_t len = GET_INSN_LENGTH(p->opcode);
 	u32 insn = len == 4 ? __BUG_INSN_32 : __BUG_INSN_16;
 
-	patch_text(p->addr, &insn, len);
+	patch_text_nosync(p->addr, &insn, len);
 }
 
 /* remove breakpoint from text */
@@ -123,7 +123,7 @@ void __kprobes arch_disarm_kprobe(struct kprobe *p)
 {
 	size_t len = GET_INSN_LENGTH(p->opcode);
 
-	patch_text(p->addr, &p->opcode, len);
+	patch_text_nosync(p->addr, &p->opcode, len);
 }
 
 void __kprobes arch_remove_kprobe(struct kprobe *p)
