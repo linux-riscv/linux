@@ -157,11 +157,17 @@ check_shutdown () {
     return $rc
 }
 
-tmp=$(mktemp -d -p "${ci_root}")
-trap 'rm -rf "$tmp"' EXIT
+tmp="/build/tmp"
+mkdir -p $tmp
+#$(mktemp -d -p "${ci_root}")
+#trap 'rm -rf "$tmp"' EXIT
 
 kernelpath=${ci_root}/$(gen_kernel_name $xlen $config $fragment $toolchain)
 vmlinuz=$(find $kernelpath -name '*vmlinu[zx]*')
+vmlinux=$(find "$kernelpath""_build" -name 'vmlinux')
+config=$(find "$kernelpath""_build" -name '.config')
+cp $vmlinux $tmp
+cp $config $tmp
 rootfs_tar=$(echo ${ci_rootfs_root}/rootfs_${xlen}_${rootfs}_*.tar.zst)
 qemu_image=$tmp/rootfs.img
 

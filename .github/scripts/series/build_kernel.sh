@@ -66,8 +66,8 @@ elif [[ $config == "kselftest" ]]; then
     make_wrap kselftest-merge
     # FIXME Do not use HZ_1000 as kselftest-ftrace fails on qemu (and only on qemu)
     $lnxroot/scripts/kconfig/merge_config.sh -y -m -O $output $output/.config \
-					     <(echo "CONFIG_KERNEL_UNCOMPRESSED=y") \
-					     <(echo "CONFIG_HZ_250=y")
+                         <(echo "CONFIG_KERNEL_UNCOMPRESSED=y") \
+                         <(echo "CONFIG_HZ_250=y")
     make_wrap olddefconfig
     keep_build=1
 elif [[ $config == "testsuites" ]]; then

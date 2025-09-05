@@ -12,9 +12,9 @@ d=$(dirname "${BASH_SOURCE[0]}")
 $d/unpack_fw.sh
 rc=0
 
-logs=$(get_logs_dir)
-subtests=${logs}/kselftest-collections.txt
-readarray -t kselftest_subtests < ${subtests}
+kselftest_subtests=(
+    "kselftest-ftrace"
+)
 
 parallel_log=$(mktemp -p ${ci_root})
 

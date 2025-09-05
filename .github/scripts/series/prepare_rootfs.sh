@@ -33,10 +33,10 @@ vmlinuz=$(find $kernelpath -name '*vmlinu[zx]*')
 kselftestpath=${kernelpath}_build/kselftest/kselftest_install
 
 imsz=0
-if [[ $tst =~ kselftest ]]; then
-    sz=$(du -B 1G -s "$kselftestpath" | awk '{print $1}')
-    imsz=$(( ${imsz} + $sz ))
-fi
+#if [[ $tst =~ kselftest ]]; then
+#    sz=$(du -B 1G -s "$kselftestpath" | awk '{print $1}')
+#    imsz=$(( ${imsz} + $sz ))
+#fi
 
 if [[ -n $modpath ]]; then
     sz=$(du -B 1G -s "$modpath" | awk '{print $1}')

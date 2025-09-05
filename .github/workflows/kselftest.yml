@@ -46,6 +46,11 @@ jobs:
         with:
           name: test-logs
           path: /build/logs/*
+      - name: Publish kernel and images
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-kernel-images
+          path: /build/tmp
       - name: Publish to SQUAD
         env:
           SQUAD_TOKEN: ${{ secrets.SQUAD_TOKEN }}
