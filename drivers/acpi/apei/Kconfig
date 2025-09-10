@@ -46,6 +46,18 @@ config ACPI_APEI_SEA
 	depends on ARM64 && ACPI_APEI_GHES
 	default y
 
+config ACPI_APEI_HEE
+	bool "APEI Hardware Error Exception support"
+	depends on RISCV && ACPI_APEI_GHES
+	default y
+	help
+	  Enable support for RISC-V Hardware Error Exception (HEE) notification
+	  in ACPI Platform Error Interface (APEI). This allows firmware
+	  to report hardware errors through RISC-V exception mechanism.
+
+	  Say Y if you want to support firmware-first error handling
+	  on RISC-V platforms with ACPI.
+
 config ACPI_APEI_MEMORY_FAILURE
 	bool "APEI memory error recovering support"
 	depends on ACPI_APEI && MEMORY_FAILURE

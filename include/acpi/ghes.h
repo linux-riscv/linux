@@ -127,6 +127,12 @@ int ghes_notify_sea(void);
 static inline int ghes_notify_sea(void) { return -ENOENT; }
 #endif
 
+#ifdef CONFIG_ACPI_APEI_HEE
+int ghes_notify_hee(void);
+#else
+static inline int ghes_notify_hee(void) { return -ENOENT; }
+#endif
+
 struct notifier_block;
 extern void ghes_register_report_chain(struct notifier_block *nb);
 extern void ghes_unregister_report_chain(struct notifier_block *nb);

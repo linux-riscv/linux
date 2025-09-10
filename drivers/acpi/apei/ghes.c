@@ -97,6 +97,11 @@
 #define FIX_APEI_GHES_SDEI_CRITICAL	__end_of_fixed_addresses
 #endif
 
+#if !defined(CONFIG_X86) && !defined(CONFIG_ARM64)
+#define FIX_APEI_GHES_NMI		__end_of_fixed_addresses
+#define FIX_APEI_GHES_SEA		__end_of_fixed_addresses
+#endif
+
 static ATOMIC_NOTIFIER_HEAD(ghes_report_chain);
 
 static inline bool is_hest_type_generic_v2(struct ghes *ghes)
@@ -1415,6 +1420,45 @@ static inline void ghes_sea_add(struct ghes *ghes) { }
 static inline void ghes_sea_remove(struct ghes *ghes) { }
 #endif /* CONFIG_ACPI_APEI_SEA */
 
+#ifdef CONFIG_ACPI_APEI_HEE
+static LIST_HEAD(ghes_hee);
+
+/*
+ * Return 0 only if one of the HEE error sources successfully reported an error
+ * record sent from the firmware.
+ */
+int ghes_notify_hee(void)
+{
+	static DEFINE_RAW_SPINLOCK(ghes_notify_lock_hee);
+	int rv;
+
+	raw_spin_lock(&ghes_notify_lock_hee);
+	rv = ghes_in_nmi_spool_from_list(&ghes_hee, FIX_APEI_GHES_HEE);
+	raw_spin_unlock(&ghes_notify_lock_hee);
+
+	return rv;
+}
+EXPORT_SYMBOL_GPL(ghes_notify_hee);
+
+static void ghes_hee_add(struct ghes *ghes)
+{
+	mutex_lock(&ghes_list_mutex);
+	list_add_rcu(&ghes->list, &ghes_hee);
+	mutex_unlock(&ghes_list_mutex);
+}
+
+static void ghes_hee_remove(struct ghes *ghes)
+{
+	mutex_lock(&ghes_list_mutex);
+	list_del_rcu(&ghes->list);
+	mutex_unlock(&ghes_list_mutex);
+	synchronize_rcu();
+}
+#else /* CONFIG_ACPI_APEI_HEE */
+static inline void ghes_hee_add(struct ghes *ghes) { }
+static inline void ghes_hee_remove(struct ghes *ghes) { }
+#endif /* CONFIG_ACPI_APEI_HEE */
+
 #ifdef CONFIG_HAVE_ACPI_APEI_NMI
 /*
  * NMI may be triggered on any CPU, so ghes_in_nmi is used for
@@ -1558,6 +1602,14 @@ static int ghes_probe(struct platform_device *ghes_dev)
 			goto err;
 		}
 		break;
+	case ACPI_HEST_NOTIFY_HEE:
+		if (!IS_ENABLED(CONFIG_ACPI_APEI_HEE)) {
+			pr_warn(GHES_PFX "Generic hardware error source: %d notified via HEE is not supported\n",
+				generic->header.source_id);
+			rc = -ENOTSUPP;
+			goto err;
+		}
+		break;
 	case ACPI_HEST_NOTIFY_NMI:
 		if (!IS_ENABLED(CONFIG_HAVE_ACPI_APEI_NMI)) {
 			pr_warn(GHES_PFX "Generic hardware error source: %d notified via NMI interrupt is not supported!\n",
@@ -1631,6 +1683,9 @@ static int ghes_probe(struct platform_device *ghes_dev)
 	case ACPI_HEST_NOTIFY_SEA:
 		ghes_sea_add(ghes);
 		break;
+	case ACPI_HEST_NOTIFY_HEE:
+		ghes_hee_add(ghes);
+		break;
 	case ACPI_HEST_NOTIFY_NMI:
 		ghes_nmi_add(ghes);
 		break;
@@ -1697,6 +1752,9 @@ static void ghes_remove(struct platform_device *ghes_dev)
 
 	case ACPI_HEST_NOTIFY_SEA:
 		ghes_sea_remove(ghes);
+		break;
+	case ACPI_HEST_NOTIFY_HEE:
+		ghes_hee_remove(ghes);
 		break;
 	case ACPI_HEST_NOTIFY_NMI:
 		ghes_nmi_remove(ghes);
