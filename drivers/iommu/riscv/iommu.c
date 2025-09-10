@@ -1584,8 +1584,8 @@ static int riscv_iommu_init_check(struct riscv_iommu_device *iommu)
 		return -EINVAL;
 
 	iommu->icvec = FIELD_PREP(RISCV_IOMMU_ICVEC_FIV, 1 % iommu->irqs_count) |
-		       FIELD_PREP(RISCV_IOMMU_ICVEC_PIV, 2 % iommu->irqs_count) |
-		       FIELD_PREP(RISCV_IOMMU_ICVEC_PMIV, 3 % iommu->irqs_count);
+		       FIELD_PREP(RISCV_IOMMU_ICVEC_PIV, 3 % iommu->irqs_count) |
+		       FIELD_PREP(RISCV_IOMMU_ICVEC_PMIV, 2 % iommu->irqs_count);
 	riscv_iommu_writeq(iommu, RISCV_IOMMU_REG_ICVEC, iommu->icvec);
 	iommu->icvec = riscv_iommu_readq(iommu, RISCV_IOMMU_REG_ICVEC);
 	if (max(max(FIELD_GET(RISCV_IOMMU_ICVEC_CIV, iommu->icvec),
