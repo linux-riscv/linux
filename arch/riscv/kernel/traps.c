@@ -22,6 +22,7 @@
 #include <linux/irq.h>
 #include <linux/kexec.h>
 #include <linux/entry-common.h>
+#include <linux/acpi.h>
 
 #include <asm/asm-prototypes.h>
 #include <asm/bug.h>
@@ -442,3 +443,21 @@ asmlinkage void handle_bad_stack(struct pt_regs *regs)
 		wait_for_interrupt();
 }
 #endif
+
+asmlinkage __visible __trap_section void do_trap_hardware_error(struct pt_regs *regs)
+{
+	if (user_mode(regs)) {
+		irqentry_enter_from_user_mode(regs);
+
+		if (apei_claim_hee(regs))
+			do_trap_error(regs, SIGBUS, BUS_OBJERR, regs->badaddr, "Hardware Error");
+
+		irqentry_exit_to_user_mode(regs);
+	} else {
+		irqentry_state_t state = irqentry_nmi_enter(regs);
+
+		die(regs, "Hardware Error");
+
+		irqentry_nmi_exit(regs, state);
+	}
+}

@@ -91,6 +91,7 @@ int acpi_get_riscv_isa(struct acpi_table_header *table,
 
 void acpi_get_cbo_block_size(struct acpi_table_header *table, u32 *cbom_size,
 			     u32 *cboz_size, u32 *cbop_size);
+int apei_claim_hee(struct pt_regs *regs);
 #else
 static inline void acpi_init_rintc_map(void) { }
 static inline struct acpi_madt_rintc *acpi_cpu_get_madt_rintc(int cpu)
@@ -108,6 +109,7 @@ static inline void acpi_get_cbo_block_size(struct acpi_table_header *table,
 					   u32 *cbom_size, u32 *cboz_size,
 					   u32 *cbop_size) { }
 
+static inline int apei_claim_hee(struct pt_regs *regs) { return -ENOENT; }
 #endif /* CONFIG_ACPI */
 
 #ifdef CONFIG_ACPI_NUMA

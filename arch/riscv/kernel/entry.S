@@ -459,6 +459,10 @@ SYM_DATA_START_LOCAL(excp_vect_table)
 	RISCV_PTR do_page_fault   /* load page fault */
 	RISCV_PTR do_trap_unknown
 	RISCV_PTR do_page_fault   /* store page fault */
+	RISCV_PTR do_trap_unknown
+	RISCV_PTR do_trap_unknown
+	RISCV_PTR do_trap_unknown
+	RISCV_PTR do_trap_hardware_error /* Hardware Error */
 SYM_DATA_END_LABEL(excp_vect_table, SYM_L_LOCAL, excp_vect_table_end)
 
 #ifndef CONFIG_MMU

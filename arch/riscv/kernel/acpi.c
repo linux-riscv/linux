@@ -20,6 +20,11 @@
 #include <linux/of_fdt.h>
 #include <linux/pci.h>
 #include <linux/serial_core.h>
+#include <linux/efi.h>
+#include <linux/irq_work.h>
+#include <linux/nmi.h>
+#include <acpi/ghes.h>
+#include <asm/csr.h>
 
 int acpi_noirq = 1;		/* skip ACPI IRQ initialization */
 int acpi_disabled = 1;
@@ -334,3 +339,53 @@ int raw_pci_write(unsigned int domain, unsigned int bus,
 }
 
 #endif	/* CONFIG_PCI */
+
+/*
+ * Claim Hardware Error Exception as a firmware first notification.
+ *
+ * Used by RISC-V exception handler for hardware error processing.
+ * @regs may be NULL when called from process context.
+ */
+int apei_claim_hee(struct pt_regs *regs)
+{
+	int err = -ENOENT;
+	bool return_to_irqs_enabled;
+	unsigned long flags;
+
+	if (!IS_ENABLED(CONFIG_ACPI_APEI_GHES))
+		return err;
+
+	/* Save current interrupt state */
+	local_irq_save(flags);
+	return_to_irqs_enabled = !irqs_disabled();
+
+	if (regs)
+		return_to_irqs_enabled = (regs->status & SR_SIE) != 0;
+
+	/*
+	 * HEE can interrupt other operations, handle as NMI-like context
+	 * to ensure proper APEI processing
+	 */
+	nmi_enter();
+	err = ghes_notify_hee();
+	nmi_exit();
+
+	/*
+	 * APEI NMI-like notifications are deferred to irq_work. Unless
+	 * we interrupted irqs-masked code, we can do that now.
+	 */
+	if (!err) {
+		if (return_to_irqs_enabled) {
+			local_irq_restore(flags);
+			irq_work_run();
+		} else {
+			pr_warn_ratelimited("APEI work queued but not completed");
+			err = -EINPROGRESS;
+		}
+	} else {
+		local_irq_restore(flags);
+	}
+
+	return err;
+}
+EXPORT_SYMBOL(apei_claim_hee);
