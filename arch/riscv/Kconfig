@@ -1374,3 +1374,5 @@ endmenu # "CPU Power Management"
 source "arch/riscv/kvm/Kconfig"
 
 source "drivers/acpi/Kconfig"
+
+source "arch/riscv/events/Kconfig"

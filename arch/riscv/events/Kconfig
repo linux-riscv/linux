@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: GPL-2.0
+menu "Performance monitoring"
+
+config PERF_EVENTS_RISCV_TRACE
+	tristate "RISCV TRACE events"
+	depends on PERF_EVENTS && RISCV
+	default m
+	help
+	  Include support for riscv trace events.
+
+endmenu

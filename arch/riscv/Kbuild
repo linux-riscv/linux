@@ -4,6 +4,7 @@ obj-y += kernel/ mm/ net/
 obj-$(CONFIG_CRYPTO) += crypto/
 obj-y += errata/
 obj-$(CONFIG_KVM) += kvm/
+obj-$(CONFIG_PERF_EVENTS) += events/
 
 obj-$(CONFIG_ARCH_SUPPORTS_KEXEC_PURGATORY) += purgatory/
 
