@@ -1,0 +1,37 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/riscv/trace/riscv,trace,sink.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: RISC-V Trace Sink Controller
+
+description: |
+  riscv trace sink controller description.
+
+maintainers:
+  - Chen Pei <cp0613@linux.alibaba.com>
+
+properties:
+  compatible:
+    items:
+      - const: riscv_trace,sink-controller
+  reg:
+    description: A memory region containing registers for sink controller
+
+  ports:
+    description: Input port definitions
+
+additionalProperties: true
+
+examples:
+  - |
+    sink0: trace_sink@26401000 {
+        compatible = "riscv_trace,sink-controller";
+        reg = <0x0 0x26401000 0x0 0x1000>;
+        input_port {
+            port0 {
+                endpoint = <&funnel0>;
+            };
+        };
+    };

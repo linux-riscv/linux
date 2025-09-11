@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/riscv/trace/riscv,trace,encoder.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: RISC-V Trace Encoder Controller
+
+description: |
+  riscv trace encoder controller description.
+
+maintainers:
+  - Chen Pei <cp0613@linux.alibaba.com>
+
+properties:
+  compatible:
+    items:
+      - const: riscv_trace,encoder-controller
+  reg:
+    description: A memory region containing registers for encoder controller
+
+  cpu:
+    description: CPU identifier associated with this encoder
+
+  ports:
+    description: Output port definitions
+
+additionalProperties: true
+
+examples:
+  - |
+    encoder0: trace_encoder@26001000 {
+        compatible = "riscv_trace,encoder-controller";
+        reg = <0x0 0x26001000 0x0 0x1000>;
+        cpu = <&cpu0>;
+        output_port {
+            port0 {
+                endpoint = <&funnel0>;
+            };
+        };
+    };
