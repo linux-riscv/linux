@@ -75,6 +75,14 @@ extern struct list_head riscv_trace_controllers;
 struct riscv_trace_pmu {
 	struct pmu pmu;
 	struct riscv_trace_filter_attr filter_attr;
+	struct perf_output_handle handle;
+};
+
+struct riscv_trace_aux_buf {
+	u32 length;
+	u32 nr_pages;
+	void *base;
+	u32 pos;
 };
 
 static inline const char *riscv_trace_type2str(enum RISCV_TRACE_COMPONENT_TYPE

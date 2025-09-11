@@ -8,6 +8,7 @@
 #include <linux/slab.h>
 #include <linux/device.h>
 #include <linux/perf_event.h>
+#include <linux/vmalloc.h>
 
 #include "riscv_trace.h"
 
@@ -81,6 +82,9 @@ static void riscv_trace_event_start(struct perf_event *event, int flags)
 {
 	pr_info("%s:%d on_cpu=%d cpu=%d\n", __func__, __LINE__,
 		event->oncpu, event->cpu);
+	// TODO: Begin aux buffer
+	// struct xuantie_ntrace_aux_buf *buf;
+	// buf = perf_aux_output_begin(&riscv_trace_pmu.handle, event);
 	// TODO: Enable the trace component
 }
 
@@ -89,6 +93,61 @@ static void riscv_trace_event_stop(struct perf_event *event, int flags)
 	pr_info("%s:%d on_cpu=%d cpu=%d\n", __func__, __LINE__,
 		event->oncpu, event->cpu);
 	// TODO: Disable the trace component
+	// TODO: End aux buffer
+	// struct xuantie_ntrace_aux_buf *buf;
+	// buf = perf_get_aux(&riscv_trace_pmu.handle);
+	// Fill aux buffer
+	// perf_aux_output_end(&riscv_trace_pmu.handle, size);
+}
+
+static void *riscv_trace_buffer_setup_aux(struct perf_event *event, void **pages,
+					 int nr_pages, bool overwrite)
+{
+	struct riscv_trace_aux_buf *buf;
+	struct page **pagelist;
+	int i;
+
+	if (overwrite) {
+		pr_warn("Overwrite mode is not supported\n");
+		return NULL;
+	}
+
+	buf = kzalloc(sizeof(*buf), GFP_KERNEL);
+	if (!buf)
+		return NULL;
+
+	pagelist = kcalloc(nr_pages, sizeof(*pagelist), GFP_KERNEL);
+	if (!pagelist)
+		goto err;
+
+	for (i = 0; i < nr_pages; i++)
+		pagelist[i] = virt_to_page(pages[i]);
+
+	buf->base = vmap(pagelist, nr_pages, VM_MAP, PAGE_KERNEL);
+	if (!buf->base) {
+		kfree(pagelist);
+		goto err;
+	}
+
+	buf->nr_pages = nr_pages;
+	buf->length = nr_pages * PAGE_SIZE;
+	buf->pos = 0;
+
+	pr_info("nr_pages=%d length=%d\n", buf->nr_pages, buf->length);
+
+	kfree(pagelist);
+	return buf;
+err:
+	kfree(buf);
+	return NULL;
+}
+
+static void riscv_trace_buffer_free_aux(void *aux)
+{
+	struct riscv_trace_aux_buf *buf = aux;
+
+	vunmap(buf->base);
+	kfree(buf);
 }
 
 static int __init riscv_trace_init(void)
@@ -128,6 +187,8 @@ static int __init riscv_trace_init(void)
 	riscv_trace_pmu.pmu.del          = riscv_trace_event_del;
 	riscv_trace_pmu.pmu.start        = riscv_trace_event_start;
 	riscv_trace_pmu.pmu.stop         = riscv_trace_event_stop;
+	riscv_trace_pmu.pmu.setup_aux    = riscv_trace_buffer_setup_aux;
+	riscv_trace_pmu.pmu.free_aux     = riscv_trace_buffer_free_aux;
 
 	return perf_pmu_register(&riscv_trace_pmu.pmu, "riscv_trace", -1);
 }
