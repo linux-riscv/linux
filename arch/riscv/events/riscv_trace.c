@@ -9,6 +9,7 @@
 #include <linux/device.h>
 #include <linux/perf_event.h>
 #include <linux/vmalloc.h>
+#include <linux/dma-mapping.h>
 
 #include "riscv_trace.h"
 
@@ -53,6 +54,44 @@ static void riscv_trace_init_filter_attrs(struct perf_event *event)
 		riscv_trace_pmu.filter_attr.start_addr,
 		riscv_trace_pmu.filter_attr.stop_addr,
 		riscv_trace_pmu.filter_attr.priv_mode);
+}
+
+static int riscv_trace_sink_dma_alloc(unsigned long size)
+{
+	struct riscv_trace_component *component;
+	dma_addr_t dma_addr;
+
+	list_for_each_entry(component, &riscv_trace_controllers, list) {
+		if (component->type == RISCV_TRACE_SINK) {
+			component->sink.vaddr =
+			    dma_alloc_coherent(riscv_trace_pmu.pmu.dev, size,
+					       &dma_addr, GFP_KERNEL);
+			if (component->sink.vaddr) {
+				component->sink.start_addr = dma_addr;
+				component->sink.limit_addr = dma_addr + size;
+				continue;
+			} else {
+				pr_err("dma_alloc_coherent failed\n");
+				return -ENOMEM;
+			}
+		}
+	}
+
+	return 0;
+}
+
+static void riscv_trace_sink_dma_free(void)
+{
+	struct riscv_trace_component *component;
+
+	list_for_each_entry(component, &riscv_trace_controllers, list) {
+		if (component->type == RISCV_TRACE_SINK) {
+			if (component->sink.vaddr)
+				dma_free_coherent(riscv_trace_pmu.pmu.dev,
+					component->sink.limit_addr - component->sink.start_addr,
+					component->sink.vaddr, component->sink.start_addr);
+		}
+	}
 }
 
 static int riscv_trace_event_init(struct perf_event *event)
@@ -105,7 +144,7 @@ static void *riscv_trace_buffer_setup_aux(struct perf_event *event, void **pages
 {
 	struct riscv_trace_aux_buf *buf;
 	struct page **pagelist;
-	int i;
+	int i, ret;
 
 	if (overwrite) {
 		pr_warn("Overwrite mode is not supported\n");
@@ -135,6 +174,12 @@ static void *riscv_trace_buffer_setup_aux(struct perf_event *event, void **pages
 
 	pr_info("nr_pages=%d length=%d\n", buf->nr_pages, buf->length);
 
+	ret = riscv_trace_sink_dma_alloc(buf->length);
+	if (ret) {
+		kfree(pagelist);
+		goto err;
+	}
+
 	kfree(pagelist);
 	return buf;
 err:
@@ -148,6 +193,8 @@ static void riscv_trace_buffer_free_aux(void *aux)
 
 	vunmap(buf->base);
 	kfree(buf);
+
+	riscv_trace_sink_dma_free();
 }
 
 static int __init riscv_trace_init(void)

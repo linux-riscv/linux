@@ -49,7 +49,9 @@ struct riscv_trace_funnel {
 };
 
 struct riscv_trace_sink {
-	;
+	u64 start_addr;
+	u64 limit_addr;
+	void __iomem *vaddr;
 };
 
 struct riscv_trace_component {
