@@ -448,7 +448,12 @@ int kvm_riscv_vcpu_virtual_insn(struct kvm_vcpu *vcpu, struct kvm_run *run,
 			insn = kvm_riscv_vcpu_unpriv_read(vcpu, true,
 							  ct->sepc,
 							  &utrap);
-			if (utrap.scause) {
+			switch (utrap.scause) {
+			case 0:
+				break;
+			case EXC_LOAD_GUEST_PAGE_FAULT:
+				return KVM_INSN_CONTINUE_SAME_SEPC;
+			default:
 				utrap.sepc = ct->sepc;
 				kvm_riscv_vcpu_trap_redirect(vcpu, &utrap);
 				return 1;
@@ -503,7 +508,12 @@ int kvm_riscv_vcpu_mmio_load(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		 */
 		insn = kvm_riscv_vcpu_unpriv_read(vcpu, true, ct->sepc,
 						  &utrap);
-		if (utrap.scause) {
+		switch (utrap.scause) {
+		case 0:
+			break;
+		case EXC_LOAD_GUEST_PAGE_FAULT:
+			return KVM_INSN_CONTINUE_SAME_SEPC;
+		default:
 			/* Redirect trap if we failed to read instruction */
 			utrap.sepc = ct->sepc;
 			kvm_riscv_vcpu_trap_redirect(vcpu, &utrap);
@@ -629,7 +639,12 @@ int kvm_riscv_vcpu_mmio_store(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		 */
 		insn = kvm_riscv_vcpu_unpriv_read(vcpu, true, ct->sepc,
 						  &utrap);
-		if (utrap.scause) {
+		switch (utrap.scause) {
+		case 0:
+			break;
+		case EXC_LOAD_GUEST_PAGE_FAULT:
+			return KVM_INSN_CONTINUE_SAME_SEPC;
+		default:
 			/* Redirect trap if we failed to read instruction */
 			utrap.sepc = ct->sepc;
 			kvm_riscv_vcpu_trap_redirect(vcpu, &utrap);
