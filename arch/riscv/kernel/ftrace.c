@@ -269,3 +269,19 @@ void ftrace_graph_func(unsigned long ip, unsigned long parent_ip,
 }
 #endif /* CONFIG_DYNAMIC_FTRACE */
 #endif /* CONFIG_FUNCTION_GRAPH_TRACER */
+
+#ifdef CONFIG_KPROBES_ON_FTRACE
+int arch_prepare_kprobe_ftrace(struct kprobe *p)
+{
+	return 0; //-EINVAL;
+}
+
+void kprobe_ftrace_handler(unsigned long ip, unsigned long parent_ip,
+			   struct ftrace_ops *ops, struct ftrace_regs *fregs)
+{
+}
+
+void ftrace_regs_caller(void)
+{
+}
+#endif
