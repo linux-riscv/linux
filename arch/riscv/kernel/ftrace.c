@@ -29,14 +29,14 @@ void ftrace_arch_code_modify_post_process(void)
 unsigned long ftrace_call_adjust(unsigned long addr)
 {
 	if (IS_ENABLED(CONFIG_DYNAMIC_FTRACE_WITH_CALL_OPS))
-		return addr + 8 + MCOUNT_AUIPC_SIZE;
+		return addr + 8; // + MCOUNT_AUIPC_SIZE;
 
-	return addr + MCOUNT_AUIPC_SIZE;
+	return addr; // + MCOUNT_AUIPC_SIZE;
 }
 
 unsigned long arch_ftrace_get_symaddr(unsigned long fentry_ip)
 {
-	return fentry_ip - MCOUNT_AUIPC_SIZE;
+	return fentry_ip; // - MCOUNT_AUIPC_SIZE;
 }
 
 void arch_ftrace_update_code(int command)
@@ -95,7 +95,7 @@ static const struct ftrace_ops *riscv64_rec_get_ops(struct dyn_ftrace *rec)
 
 static int ftrace_rec_set_ops(const struct dyn_ftrace *rec, const struct ftrace_ops *ops)
 {
-	unsigned long literal = ALIGN_DOWN(rec->ip - 12, 8);
+	unsigned long literal = ALIGN_DOWN(rec->ip - 8, 8);
 
 	return patch_text_nosync((void *)literal, &ops, sizeof(ops));
 }
@@ -116,7 +116,7 @@ static int ftrace_rec_update_ops(struct dyn_ftrace *rec) { return 0; }
 
 int ftrace_make_call(struct dyn_ftrace *rec, unsigned long addr)
 {
-	unsigned long distance, orig_addr, pc = rec->ip - MCOUNT_AUIPC_SIZE;
+	unsigned long distance, orig_addr, pc = rec->ip; // - MCOUNT_AUIPC_SIZE;
 	int ret;
 
 	ret = ftrace_rec_update_ops(rec);
@@ -155,7 +155,7 @@ int ftrace_make_nop(struct module *mod, struct dyn_ftrace *rec, unsigned long ad
  */
 int ftrace_init_nop(struct module *mod, struct dyn_ftrace *rec)
 {
-	unsigned long pc = rec->ip - MCOUNT_AUIPC_SIZE;
+	unsigned long pc = rec->ip; // - MCOUNT_AUIPC_SIZE;
 	unsigned int nops[2], offset;
 	int ret;
 
@@ -212,7 +212,7 @@ unsigned long ftrace_call_adjust(unsigned long addr)
 int ftrace_modify_call(struct dyn_ftrace *rec, unsigned long old_addr,
 		       unsigned long addr)
 {
-	unsigned long caller = rec->ip - MCOUNT_AUIPC_SIZE;
+	unsigned long caller = rec->ip; // - MCOUNT_AUIPC_SIZE;
 	int ret;
 
 	ret = ftrace_rec_update_ops(rec);
