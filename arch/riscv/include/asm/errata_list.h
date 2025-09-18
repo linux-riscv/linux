@@ -10,7 +10,7 @@
 #include <asm/insn-def.h>
 #include <asm/hwcap.h>
 #include <asm/vendorid_list.h>
-#include <asnm/errata_list_vendors.h>
+#include <asm/errata_list_vendors.h>
 
 #ifdef __ASSEMBLER__
 
