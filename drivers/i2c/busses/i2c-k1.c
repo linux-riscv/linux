@@ -97,6 +97,9 @@
 
 #define SPACEMIT_BUS_RESET_CLK_CNT_MAX		9
 
+/* Constants */
+#define SPACEMIT_WAIT_TIMEOUT      1000 /* ms */
+
 enum spacemit_i2c_state {
 	SPACEMIT_STATE_IDLE,
 	SPACEMIT_STATE_START,
@@ -125,6 +128,7 @@ struct spacemit_i2c_dev {
 
 	enum spacemit_i2c_state state;
 	bool read;
+	bool is_pio;
 	struct completion complete;
 	u32 status;
 };
@@ -206,9 +210,14 @@ static int spacemit_i2c_wait_bus_idle(struct spacemit_i2c_dev *i2c)
 	if (!(val & (SPACEMIT_SR_UB | SPACEMIT_SR_IBB)))
 		return 0;
 
-	ret = readl_poll_timeout(i2c->base + SPACEMIT_ISR,
-				 val, !(val & (SPACEMIT_SR_UB | SPACEMIT_SR_IBB)),
-				 1500, SPACEMIT_I2C_BUS_BUSY_TIMEOUT);
+	if (!i2c->is_pio)
+		ret = readl_poll_timeout(i2c->base + SPACEMIT_ISR,
+					 val, !(val & (SPACEMIT_SR_UB | SPACEMIT_SR_IBB)),
+					 1500, SPACEMIT_I2C_BUS_BUSY_TIMEOUT);
+	else
+		ret = readl_poll_timeout_atomic(i2c->base + SPACEMIT_ISR,
+						val, !(val & (SPACEMIT_SR_UB | SPACEMIT_SR_IBB)),
+						1500, SPACEMIT_I2C_BUS_BUSY_TIMEOUT);
 	if (ret)
 		spacemit_i2c_reset(i2c);
 
@@ -226,7 +235,7 @@ static void spacemit_i2c_check_bus_release(struct spacemit_i2c_dev *i2c)
 
 static void spacemit_i2c_init(struct spacemit_i2c_dev *i2c)
 {
-	u32 val;
+	u32 val = 0;
 
 	/*
 	 * Unmask interrupt bits for all xfer mode:
@@ -234,7 +243,8 @@ static void spacemit_i2c_init(struct spacemit_i2c_dev *i2c)
 	 * For transaction complete signal, we use master stop
 	 * interrupt, so we don't need to unmask SPACEMIT_CR_TXDONEIE.
 	 */
-	val = SPACEMIT_CR_BEIE | SPACEMIT_CR_ALDIE;
+	if (!i2c->is_pio)
+		val = SPACEMIT_CR_BEIE | SPACEMIT_CR_ALDIE;
 
 	/*
 	 * Unmask interrupt bits for interrupt xfer mode:
@@ -244,7 +254,8 @@ static void spacemit_i2c_init(struct spacemit_i2c_dev *i2c)
 	 * i2c_start function.
 	 * Otherwise, it will cause an erroneous empty interrupt before i2c_start.
 	 */
-	val |= SPACEMIT_CR_DRFIE;
+	if (!i2c->is_pio)
+		val |= SPACEMIT_CR_DRFIE;
 
 	if (i2c->clock_freq == SPACEMIT_I2C_MAX_FAST_MODE_FREQ)
 		val |= SPACEMIT_CR_MODE_FAST;
@@ -256,7 +267,10 @@ static void spacemit_i2c_init(struct spacemit_i2c_dev *i2c)
 	val |= SPACEMIT_CR_SCLE;
 
 	/* enable master stop detected */
-	val |= SPACEMIT_CR_MSDE | SPACEMIT_CR_MSDIE;
+	val |= SPACEMIT_CR_MSDE;
+
+	if (!i2c->is_pio)
+		val |= SPACEMIT_CR_MSDIE;
 
 	writel(val, i2c->base + SPACEMIT_ICR);
 
@@ -293,8 +307,52 @@ static void spacemit_i2c_start(struct spacemit_i2c_dev *i2c)
 	/* send start pulse */
 	val = readl(i2c->base + SPACEMIT_ICR);
 	val &= ~SPACEMIT_CR_STOP;
-	val |= SPACEMIT_CR_START | SPACEMIT_CR_TB | SPACEMIT_CR_DTEIE;
+	val |= SPACEMIT_CR_START | SPACEMIT_CR_TB;
+
+	if (!i2c->is_pio)
+		val |= SPACEMIT_CR_DTEIE;
+
 	writel(val, i2c->base + SPACEMIT_ICR);
+}
+
+static irqreturn_t spacemit_i2c_irq_handler(int irq, void *devid);
+static int spacemit_i2c_wait_pio_xfer(struct spacemit_i2c_dev *i2c)
+{
+	u32 msec = jiffies_to_msecs(i2c->adapt.timeout);
+	ktime_t timeout = ktime_add_ms(ktime_get(), msec);
+	int ret;
+
+	while (i2c->unprocessed && ktime_compare(ktime_get(), timeout) < 0) {
+		udelay(10);
+		i2c->status = readl(i2c->base + SPACEMIT_ISR);
+
+		spacemit_i2c_clear_int_status(i2c, i2c->status);
+
+		if (!(i2c->status & SPACEMIT_SR_IRF) && !(i2c->status & SPACEMIT_SR_ITE))
+			continue;
+
+		spacemit_i2c_irq_handler(0, i2c);
+
+		i2c->status = readl(i2c->base + SPACEMIT_ISR);
+
+		/*
+		 * This is the last byte to write of the current message.
+		 * If we do not wait here, control will proceed directly to start(),
+		 * which would overwrite the current data.
+		 */
+		if (!i2c->read && !i2c->unprocessed) {
+			ret = readl_poll_timeout(i2c->base + SPACEMIT_ISR,
+						i2c->status, i2c->status & SPACEMIT_SR_ITE,
+						30, 1000);
+			if (ret)
+				return 0;
+		}
+	}
+
+	if (i2c->unprocessed)
+		return 0;
+
+	return 1;
 }
 
 static int spacemit_i2c_xfer_msg(struct spacemit_i2c_dev *i2c)
@@ -310,10 +368,28 @@ static int spacemit_i2c_xfer_msg(struct spacemit_i2c_dev *i2c)
 
 		reinit_completion(&i2c->complete);
 
-		spacemit_i2c_start(i2c);
+		if (i2c->is_pio) {
+			/* We disable the interrupt to avoid unintended spurious triggers. */
+			disable_irq(i2c->irq);
 
-		time_left = wait_for_completion_timeout(&i2c->complete,
-							i2c->adapt.timeout);
+			/*
+			 * The K1 I2C controller has a quirk:
+			 * when doing PIO transfers, the status register must be cleared
+			 * of all other bits before issuing a START.
+			 * Failing to do so will prevent the transfer from working properly.
+			 */
+			spacemit_i2c_clear_int_status(i2c, SPACEMIT_I2C_INT_STATUS_MASK);
+
+			spacemit_i2c_start(i2c);
+			time_left = spacemit_i2c_wait_pio_xfer(i2c);
+
+			enable_irq(i2c->irq);
+		} else {
+			spacemit_i2c_start(i2c);
+			time_left = wait_for_completion_timeout(&i2c->complete,
+								i2c->adapt.timeout);
+		}
+
 		if (!time_left) {
 			dev_err(i2c->dev, "msg completion timeout\n");
 			spacemit_i2c_conditionally_reset_bus(i2c);
@@ -341,6 +417,9 @@ static bool spacemit_i2c_is_last_msg(struct spacemit_i2c_dev *i2c)
 
 static void spacemit_i2c_handle_write(struct spacemit_i2c_dev *i2c)
 {
+	if (!(i2c->status & SPACEMIT_SR_ITE))
+		return;
+
 	/* if transfer completes, SPACEMIT_ISR will handle it */
 	if (i2c->status & SPACEMIT_SR_MSD)
 		return;
@@ -353,14 +432,20 @@ static void spacemit_i2c_handle_write(struct spacemit_i2c_dev *i2c)
 
 	/* SPACEMIT_STATE_IDLE avoids trigger next byte */
 	i2c->state = SPACEMIT_STATE_IDLE;
-	complete(&i2c->complete);
+
+	if (!i2c->is_pio)
+		complete(&i2c->complete);
 }
 
 static void spacemit_i2c_handle_read(struct spacemit_i2c_dev *i2c)
 {
+	if (!(i2c->status & SPACEMIT_SR_IRF))
+		return;
+
 	if (i2c->unprocessed) {
 		*i2c->msg_buf++ = readl(i2c->base + SPACEMIT_IDBR);
 		i2c->unprocessed--;
+		return;
 	}
 
 	/* if transfer completes, SPACEMIT_ISR will handle it */
@@ -373,7 +458,9 @@ static void spacemit_i2c_handle_read(struct spacemit_i2c_dev *i2c)
 
 	/* SPACEMIT_STATE_IDLE avoids trigger next byte */
 	i2c->state = SPACEMIT_STATE_IDLE;
-	complete(&i2c->complete);
+
+	if (!i2c->is_pio)
+		complete(&i2c->complete);
 }
 
 static void spacemit_i2c_handle_start(struct spacemit_i2c_dev *i2c)
@@ -408,7 +495,9 @@ static void spacemit_i2c_err_check(struct spacemit_i2c_dev *i2c)
 	spacemit_i2c_clear_int_status(i2c, SPACEMIT_I2C_INT_STATUS_MASK);
 
 	i2c->state = SPACEMIT_STATE_IDLE;
-	complete(&i2c->complete);
+
+	if (!i2c->is_pio)
+		complete(&i2c->complete);
 }
 
 static irqreturn_t spacemit_i2c_irq_handler(int irq, void *devid)
@@ -416,13 +505,20 @@ static irqreturn_t spacemit_i2c_irq_handler(int irq, void *devid)
 	struct spacemit_i2c_dev *i2c = devid;
 	u32 status, val;
 
-	status = readl(i2c->base + SPACEMIT_ISR);
-	if (!status)
-		return IRQ_HANDLED;
+	/*
+	 * In PIO mode, do not read status again.
+	 * It has already been read in wait_pio_xfer(),
+	 * and reading it clears some bits.
+	 */
+	if (!i2c->is_pio) {
+		status = readl(i2c->base + SPACEMIT_ISR);
+		if (!status)
+			return IRQ_HANDLED;
 
-	i2c->status = status;
+		i2c->status = status;
 
-	spacemit_i2c_clear_int_status(i2c, status);
+		spacemit_i2c_clear_int_status(i2c, status);
+	}
 
 	if (i2c->status & SPACEMIT_SR_ERR)
 		goto err_out;
@@ -445,7 +541,10 @@ static irqreturn_t spacemit_i2c_irq_handler(int irq, void *devid)
 	}
 
 	if (i2c->state != SPACEMIT_STATE_IDLE) {
-		val |= SPACEMIT_CR_TB | SPACEMIT_CR_ALDIE;
+		val |= SPACEMIT_CR_TB;
+		if (i2c->is_pio)
+			val |= SPACEMIT_CR_ALDIE;
+
 
 		if (spacemit_i2c_is_last_msg(i2c)) {
 			/* trigger next byte with stop */
@@ -479,15 +578,21 @@ static void spacemit_i2c_calc_timeout(struct spacemit_i2c_dev *i2c)
 	i2c->adapt.timeout = usecs_to_jiffies(timeout + USEC_PER_SEC / 10) / i2c->msg_num;
 }
 
-static int spacemit_i2c_xfer(struct i2c_adapter *adapt, struct i2c_msg *msgs, int num)
+static inline int
+spacemit_i2c_xfer(struct i2c_adapter *adapt, struct i2c_msg *msgs, int num, bool is_pio)
 {
 	struct spacemit_i2c_dev *i2c = i2c_get_adapdata(adapt);
 	int ret;
 
+	i2c->is_pio = is_pio;
+
 	i2c->msgs = msgs;
 	i2c->msg_num = num;
 
-	spacemit_i2c_calc_timeout(i2c);
+	if (!i2c->is_pio)
+		spacemit_i2c_calc_timeout(i2c);
+	else
+		i2c->adapt.timeout = SPACEMIT_WAIT_TIMEOUT;
 
 	spacemit_i2c_init(i2c);
 
@@ -506,9 +611,19 @@ static int spacemit_i2c_xfer(struct i2c_adapter *adapt, struct i2c_msg *msgs, in
 
 	if (ret == -ETIMEDOUT || ret == -EAGAIN)
 		dev_err(i2c->dev, "i2c transfer failed, ret %d err 0x%lx\n",
-			  ret, i2c->status & SPACEMIT_SR_ERR);
+			ret, i2c->status & SPACEMIT_SR_ERR);
 
 	return ret < 0 ? ret : num;
+}
+
+static int spacemit_i2c_int_xfer(struct i2c_adapter *adapt, struct i2c_msg *msgs, int num)
+{
+	return spacemit_i2c_xfer(adapt, msgs, num, false);
+}
+
+static int spacemit_i2c_pio_xfer(struct i2c_adapter *adapt, struct i2c_msg *msgs, int num)
+{
+	return spacemit_i2c_xfer(adapt, msgs, num, true);
 }
 
 static u32 spacemit_i2c_func(struct i2c_adapter *adap)
@@ -517,7 +632,8 @@ static u32 spacemit_i2c_func(struct i2c_adapter *adap)
 }
 
 static const struct i2c_algorithm spacemit_i2c_algo = {
-	.xfer = spacemit_i2c_xfer,
+	.xfer = spacemit_i2c_int_xfer,
+	.xfer_atomic = spacemit_i2c_pio_xfer,
 	.functionality = spacemit_i2c_func,
 };
 
