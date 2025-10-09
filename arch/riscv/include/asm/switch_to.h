@@ -98,7 +98,17 @@ static inline bool switch_to_should_flush_icache(struct task_struct *task)
 	bool stale_thread = task->thread.force_icache_flush;
 	bool thread_migrated = smp_processor_id() != task->thread.prev_cpu;
 
+	asm goto(ALTERNATIVE("nop", "j %l[ziccid]", 0, RISCV_ISA_EXT_ZICCID, 1)
+		 : : : : ziccid);
+
 	return thread_migrated && (stale_mm || stale_thread);
+
+ziccid:
+	/*
+	 * Process switching writes to SATP, which flushes the pipeline,
+	 * so only the thread scenario is considered.
+	 */
+	return thread_migrated && stale_thread;
 #else
 	return false;
 #endif

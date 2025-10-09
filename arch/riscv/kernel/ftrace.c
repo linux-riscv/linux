@@ -43,7 +43,7 @@ void arch_ftrace_update_code(int command)
 {
 	command |= FTRACE_MAY_SLEEP;
 	ftrace_modify_all_code(command);
-	flush_icache_all();
+	flush_icache_all(false);
 }
 
 static int __ftrace_modify_call(unsigned long source, unsigned long target, bool validate)

@@ -51,5 +51,5 @@ bool arch_jump_label_transform_queue(struct jump_entry *entry,
 
 void arch_jump_label_transform_apply(void)
 {
-	flush_icache_all();
+	flush_icache_all(false);
 }

@@ -68,7 +68,7 @@ static inline void flush_cache_vmap(unsigned long start, unsigned long end)
 
 #else /* CONFIG_SMP */
 
-void flush_icache_all(void);
+void flush_icache_all(bool force);
 void flush_icache_mm(struct mm_struct *mm, bool local);
 
 #endif /* CONFIG_SMP */
@@ -80,7 +80,7 @@ void flush_icache_mm(struct mm_struct *mm, bool local);
 #define flush_icache_range flush_icache_range
 static inline void flush_icache_range(unsigned long start, unsigned long end)
 {
-	flush_icache_all();
+	flush_icache_all(false);
 }
 
 extern unsigned int riscv_cbom_block_size;

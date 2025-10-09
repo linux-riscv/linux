@@ -12,19 +12,24 @@
 #ifdef CONFIG_SMP
 
 #include <asm/sbi.h>
+#include <asm/alternative-macros.h>
 
 static void ipi_remote_fence_i(void *info)
 {
 	return local_flush_icache_all();
 }
 
-void flush_icache_all(void)
+void flush_icache_all(bool force)
 {
 	local_flush_icache_all();
 
 	if (num_online_cpus() < 2)
 		return;
 
+	if (!force)
+		asm goto(ALTERNATIVE("nop", "j %l[ziccid]", 0,
+			RISCV_ISA_EXT_ZICCID, 1)
+			: : : : ziccid);
 	/*
 	 * Make sure all previous writes to the D$ are ordered before making
 	 * the IPI. The RISC-V spec states that a hart must execute a data fence
@@ -41,6 +46,7 @@ void flush_icache_all(void)
 		sbi_remote_fence_i(NULL);
 	else
 		on_each_cpu(ipi_remote_fence_i, NULL, 1);
+ziccid:;
 }
 EXPORT_SYMBOL(flush_icache_all);
 
@@ -61,13 +67,17 @@ void flush_icache_mm(struct mm_struct *mm, bool local)
 
 	preempt_disable();
 
+	local_flush_icache_all();
+
+	asm goto(ALTERNATIVE("nop", "j %l[ziccid]", 0, RISCV_ISA_EXT_ZICCID, 1)
+		 : : : : ziccid);
+
 	/* Mark every hart's icache as needing a flush for this MM. */
 	mask = &mm->context.icache_stale_mask;
 	cpumask_setall(mask);
 	/* Flush this hart's I$ now, and mark it as flushed. */
 	cpu = smp_processor_id();
 	cpumask_clear_cpu(cpu, mask);
-	local_flush_icache_all();
 
 	/*
 	 * Flush the I$ of other harts concurrently executing, and mark them as
@@ -90,6 +100,8 @@ void flush_icache_mm(struct mm_struct *mm, bool local)
 	} else {
 		on_each_cpu_mask(&others, ipi_remote_fence_i, NULL, 1);
 	}
+
+ziccid:;
 
 	preempt_enable();
 }
