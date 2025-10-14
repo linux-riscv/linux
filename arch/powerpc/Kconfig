@@ -127,6 +127,7 @@ config PPC
 	select ARCH_DMA_DEFAULT_COHERENT	if !NOT_COHERENT_CACHE
 	select ARCH_ENABLE_MEMORY_HOTPLUG
 	select ARCH_ENABLE_MEMORY_HOTREMOVE
+	select ARCH_HAS_CC_CAN_LINK
 	select ARCH_HAS_COPY_MC			if PPC64
 	select ARCH_HAS_CURRENT_STACK_POINTER
 	select ARCH_HAS_DEBUG_VIRTUAL
@@ -1340,6 +1341,20 @@ endif
 
 config PPC_LIB_RHEAP
 	bool
+
+config ARCH_CC_CAN_LINK
+	bool
+	default $(cc_can_link_user,-m64 -mlittle-endian) if 64BIT && CPU_LITTLE_ENDIAN
+	default $(cc_can_link_user,-m64 -mbig-endian) if 64BIT && CPU_BIG_ENDIAN
+	default $(cc_can_link_user,-m32 -mlittle-endian) if CPU_LITTLE_ENDIAN
+	default $(cc_can_link_user,-m32 -mbig-endian) if CPU_BIG_ENDIAN
+
+config ARCH_USERFLAGS
+	string
+	default "-m64 -mlittle-endian" if 64BIT && CPU_LITTLE_ENDIAN
+	default "-m64 -mbig-endian" if 64BIT && CPU_BIG_ENDIAN
+	default "-m32 -mlittle-endian" if CPU_LITTLE_ENDIAN
+	default "-m32 -mbig-endian" if CPU_BIG_ENDIAN
 
 source "arch/powerpc/kvm/Kconfig"
 
