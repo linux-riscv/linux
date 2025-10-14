@@ -88,8 +88,7 @@ config ARCH_HAS_CC_CAN_LINK
 config CC_CAN_LINK
 	bool
 	default ARCH_CC_CAN_LINK if ARCH_HAS_CC_CAN_LINK
-	default $(cc_can_link_user,$(m64-flag)) if 64BIT
-	default $(cc_can_link_user,$(m32-flag))
+	default $(cc_can_link_user)
 
 # Fixed in GCC 14, 13.3, 12.4 and 11.5
 # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=113921
