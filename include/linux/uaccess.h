@@ -830,6 +830,50 @@ for (bool ____stop = false; !____stop; ____stop = true)						\
 #define scoped_masked_user_rw_access(_uptr, _elbl)				\
 	scoped_masked_user_rw_access_size((_uptr), sizeof(*(_uptr)), _elbl)
 
+/**
+ * get_user_masked - Read user data with masked access
+ * @_val:	The variable to store the value read from user memory
+ * @_usrc:	Pointer to the user space memory to read from
+ *
+ * Return: true if successful, false when faulted
+ */
+#define get_user_masked(_val, _usrc)				\
+({								\
+	__label__ efault;					\
+	typeof((_usrc)) _tmpsrc	= (_usrc);			\
+	bool ____ret = true;					\
+								\
+	scoped_masked_user_read_access(_tmpsrc, efault)		\
+		unsafe_get_user(_val, _tmpsrc, efault);		\
+	if (0) {						\
+	efault:							\
+		____ret = false;				\
+	}							\
+	____ret;						\
+})
+
+/**
+ * put_user_masked - Write to user memory with masked access
+ * @_val:	The value to write
+ * @_udst:	Pointer to the user space memory to write to
+ *
+ * Return: true if successful, false when faulted
+ */
+#define put_user_masked(_val, _udst)				\
+({								\
+	__label__ efault;					\
+	typeof((_udst)) _tmpdst	= (_udst);			\
+	bool ____ret = true;					\
+								\
+	scoped_masked_user_write_access(_tmpdst, efault)	\
+		unsafe_put_user(_val, _tmpdst, efault);		\
+	if (0) {						\
+	efault:							\
+		____ret = false;				\
+	}							\
+	____ret;						\
+})
+
 #ifdef CONFIG_HARDENED_USERCOPY
 void __noreturn usercopy_abort(const char *name, const char *detail,
 			       bool to_user, unsigned long offset,
