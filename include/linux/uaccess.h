@@ -2,6 +2,7 @@
 #ifndef __LINUX_UACCESS_H__
 #define __LINUX_UACCESS_H__
 
+#include <linux/cleanup.h>
 #include <linux/fault-inject-usercopy.h>
 #include <linux/instrumented.h>
 #include <linux/minmax.h>
@@ -35,9 +36,17 @@
 
 #ifdef masked_user_access_begin
  #define can_do_masked_user_access() 1
+# ifndef masked_user_write_access_begin
+#  define masked_user_write_access_begin masked_user_access_begin
+# endif
+# ifndef masked_user_read_access_begin
+#  define masked_user_read_access_begin masked_user_access_begin
+#endif
 #else
  #define can_do_masked_user_access() 0
  #define masked_user_access_begin(src) NULL
+ #define masked_user_read_access_begin(src) NULL
+ #define masked_user_write_access_begin(src) NULL
  #define mask_user_address(src) (src)
 #endif
 
@@ -632,6 +641,194 @@ static inline void user_access_restore(unsigned long flags) { }
 #define user_read_access_begin user_access_begin
 #define user_read_access_end user_access_end
 #endif
+
+/* Define RW variant so the below _mode macro expansion works */
+#define masked_user_rw_access_begin(u)	masked_user_access_begin(u)
+#define user_rw_access_begin(u, s)	user_access_begin(u, s)
+#define user_rw_access_end()		user_access_end()
+
+/* Scoped user access */
+#define USER_ACCESS_GUARD(_mode)					\
+static __always_inline void __user *					\
+class_masked_user_##_mode##_begin(void __user *ptr)			\
+{									\
+	return ptr;							\
+}									\
+									\
+static __always_inline void						\
+class_masked_user_##_mode##_end(void __user *ptr)			\
+{									\
+	user_##_mode##_access_end();					\
+}									\
+									\
+DEFINE_CLASS(masked_user_ ##_mode## _access, void __user *,		\
+	     class_masked_user_##_mode##_end(_T),			\
+	     class_masked_user_##_mode##_begin(ptr), void __user *ptr)	\
+									\
+static __always_inline class_masked_user_##_mode##_access_t		\
+class_masked_user_##_mode##_access_ptr(void __user *scope)		\
+{									\
+	return scope;							\
+}
+
+USER_ACCESS_GUARD(read)
+USER_ACCESS_GUARD(write)
+USER_ACCESS_GUARD(rw)
+#undef USER_ACCESS_GUARD
+
+/**
+ * __scoped_user_access_begin - Start the masked user access
+ * @_mode:	The mode of the access class (read, write, rw)
+ * @_uptr:	The pointer to access user space memory
+ * @_size:	Size of the access
+ * @_elbl:	Error label to goto when the access region is rejected.
+ *
+ * Internal helper for __scoped_masked_user_access(). Don't use directly
+ */
+#define __scoped_user_access_begin(_mode, _uptr, _size, _elbl)		\
+({									\
+	typeof((_uptr)) ____ret;					\
+									\
+	if (can_do_masked_user_access()) {				\
+		____ret = masked_user_##_mode##_access_begin((_uptr));	\
+	} else {							\
+		____ret = _uptr;					\
+		if (!user_##_mode##_access_begin(_uptr, (_size)))	\
+			goto _elbl;					\
+	}								\
+	____ret;							\
+})
+
+/**
+ * __scoped_masked_user_access - Open a scope for masked user access
+ * @_mode:	The mode of the access class (read, write, rw)
+ * @_uptr:	The pointer to access user space memory
+ * @_size:	Size of the access
+ * @_elbl:	Error label to goto when the access region is rejected. It
+ *		must be placed outside the scope.
+ *
+ * If the user access function inside the scope requires a fault label, it
+ * can use @_elvl or a difference label outside the scope, which requires
+ * that user access which is implemented with ASM GOTO has been properly
+ * wrapped. See unsafe_get_user() for reference.
+ *
+ *	scoped_masked_user_rw_access(ptr, efault) {
+ *		unsafe_get_user(rval, &ptr->rval, efault);
+ *		unsafe_put_user(wval, &ptr->wval, efault);
+ *	}
+ *	return 0;
+ *  efault:
+ *	return -EFAULT;
+ *
+ * The scope is internally implemented as a autoterminating nested for()
+ * loop, which can be left with 'return', 'break' and 'goto' at any
+ * point.
+ *
+ * When the scope is left user_##@_mode##_access_end() is automatically
+ * invoked.
+ *
+ * When the architecture supports masked user access and the access region
+ * which is determined by @_uptr and @_size is not a valid user space
+ * address, i.e. < TASK_SIZE, the scope sets the pointer to a faulting user
+ * space address and does not terminate early. This optimizes for the good
+ * case and lets the performance uncritical bad case go through the fault.
+ *
+ * The eventual modification of the pointer is limited to the scope.
+ * Outside of the scope the original pointer value is unmodified, so that
+ * the original pointer value is available for diagnostic purposes in an
+ * out of scope fault path.
+ *
+ * Nesting scoped masked user access into a masked user access scope is
+ * invalid and fails the build. Nesting into other guards, e.g. pagefault
+ * is safe.
+ *
+ * Don't use directly. Use the scoped_masked_user_$MODE_access() instead.
+*/
+#define __scoped_masked_user_access(_mode, _uptr, _size, _elbl)					\
+for (bool ____stop = false; !____stop; ____stop = true)						\
+	for (typeof((_uptr)) _tmpptr = __scoped_user_access_begin(_mode, _uptr, _size, _elbl);	\
+	     !____stop; ____stop = true)							\
+		for (CLASS(masked_user_##_mode##_access, scope) (_tmpptr); !____stop;		\
+		     ____stop = true)					\
+			/* Force modified pointer usage within the scope */			\
+			for (const typeof((_uptr)) _uptr = _tmpptr; !____stop; ____stop = true)	\
+				if (1)
+
+/**
+ * scoped_masked_user_read_access_size - Start a scoped user read access with given size
+ * @_usrc:	Pointer to the user space address to read from
+ * @_size:	Size of the access starting from @_usrc
+ * @_elbl:	Error label to goto when the access region is rejected.
+ *
+ * For further information see __scoped_masked_user_access() above.
+ */
+#define scoped_masked_user_read_access_size(_usrc, _size, _elbl)		\
+	__scoped_masked_user_access(read, (_usrc), (_size), _elbl)
+
+/**
+ * scoped_masked_user_read_access - Start a scoped user read access
+ * @_usrc:	Pointer to the user space address to read from
+ * @_elbl:	Error label to goto when the access region is rejected.
+ *
+ * The size of the access starting from @_usrc is determined via sizeof(*@_usrc)).
+ *
+ * For further information see __scoped_masked_user_access() above.
+ */
+#define scoped_masked_user_read_access(_usrc, _elbl)				\
+	scoped_masked_user_read_access_size((_usrc), sizeof(*(_usrc)), _elbl)
+
+/**
+ * scoped_masked_user_read_end - End a scoped user read access
+ *
+ * Ends the scope opened with scoped_masked_user_read_access[_size]()
+ */
+#define scoped_masked_user_read_end()	__scoped_masked_user_end()
+
+/**
+ * scoped_masked_user_write_access_size - Start a scoped user write access with given size
+ * @_udst:	Pointer to the user space address to write to
+ * @_size:	Size of the access starting from @_udst
+ * @_elbl:	Error label to goto when the access region is rejected.
+ *
+ * For further information see __scoped_masked_user_access() above.
+ */
+#define scoped_masked_user_write_access_size(_udst, _size, _elbl)		\
+	__scoped_masked_user_access(write, (_udst),  (_size), _elbl)
+
+/**
+ * scoped_masked_user_write_access - Start a scoped user write access
+ * @_udst:	Pointer to the user space address to write to
+ * @_elbl:	Error label to goto when the access region is rejected.
+ *
+ * The size of the access starting from @_udst is determined via sizeof(*@_udst)).
+ *
+ * For further information see __scoped_masked_user_access() above.
+ */
+#define scoped_masked_user_write_access(_udst, _elbl)				\
+	scoped_masked_user_write_access_size((_udst), sizeof(*(_udst)), _elbl)
+
+/**
+ * scoped_masked_user_rw_access_size - Start a scoped user read/write access with given size
+ * @_uptr	Pointer to the user space address to read from and write to
+ * @_size:	Size of the access starting from @_uptr
+ * @_elbl:	Error label to goto when the access region is rejected.
+ *
+ * For further information see __scoped_masked_user_access() above.
+ */
+#define scoped_masked_user_rw_access_size(_uptr, _size, _elbl)			\
+	__scoped_masked_user_access(rw, (_uptr), (_size), _elbl)
+
+/**
+ * scoped_masked_user_rw_access - Start a scoped user read/write access
+ * @_uptr	Pointer to the user space address to read from and write to
+ * @_elbl:	Error label to goto when the access region is rejected.
+ *
+ * The size of the access starting from @_uptr is determined via sizeof(*@_uptr)).
+ *
+ * For further information see __scoped_masked_user_access() above.
+ */
+#define scoped_masked_user_rw_access(_uptr, _elbl)				\
+	scoped_masked_user_rw_access_size((_uptr), sizeof(*(_uptr)), _elbl)
 
 #ifdef CONFIG_HARDENED_USERCOPY
 void __noreturn usercopy_abort(const char *name, const char *detail,
