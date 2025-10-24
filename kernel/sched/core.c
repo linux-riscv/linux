@@ -4947,7 +4947,7 @@ static inline void prepare_task(struct task_struct *next)
 	WRITE_ONCE(next->on_cpu, 1);
 }
 
-static inline void finish_task(struct task_struct *prev)
+static __always_inline void finish_task(struct task_struct *prev)
 {
 	/*
 	 * This must be the very last reference to @prev from this CPU. After
@@ -5061,7 +5061,7 @@ prepare_lock_switch(struct rq *rq, struct task_struct *next, struct rq_flags *rf
 #endif
 }
 
-static inline void finish_lock_switch(struct rq *rq)
+static __always_inline void finish_lock_switch(struct rq *rq)
 {
 	/*
 	 * If we are tracking spinlock dependencies then we have to
@@ -5082,7 +5082,8 @@ static inline void finish_lock_switch(struct rq *rq)
 #endif
 
 #ifndef finish_arch_post_lock_switch
-# define finish_arch_post_lock_switch()	do { } while (0)
+# define finish_arch_post_lock_switch()		do { } while (0)
+# define finish_arch_post_lock_switch_ainline()	do { } while (0)
 #endif
 
 static inline void kmap_local_sched_out(void)
@@ -5093,7 +5094,7 @@ static inline void kmap_local_sched_out(void)
 #endif
 }
 
-static inline void kmap_local_sched_in(void)
+static __always_inline void kmap_local_sched_in(void)
 {
 #ifdef CONFIG_KMAP_LOCAL
 	if (unlikely(current->kmap_ctrl.idx))
@@ -5189,7 +5190,7 @@ static __always_inline struct rq *finish_task_switch_ainline(struct task_struct 
 	finish_task(prev);
 	tick_nohz_task_switch();
 	finish_lock_switch(rq);
-	finish_arch_post_lock_switch();
+	finish_arch_post_lock_switch_ainline();
 	kcov_finish_switch(current);
 	/*
 	 * kmap_local_sched_out() is invoked with rq::lock held and

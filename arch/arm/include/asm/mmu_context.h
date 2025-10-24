@@ -80,7 +80,7 @@ static inline void check_and_switch_context(struct mm_struct *mm,
 #ifndef MODULE
 #define finish_arch_post_lock_switch \
 	finish_arch_post_lock_switch
-static inline void finish_arch_post_lock_switch(void)
+static __always_inline void finish_arch_post_lock_switch_ainline(void)
 {
 	struct mm_struct *mm = current->mm;
 
@@ -98,6 +98,10 @@ static inline void finish_arch_post_lock_switch(void)
 		}
 		preempt_enable_no_resched();
 	}
+}
+static inline void finish_arch_post_lock_switch(void)
+{
+	finish_arch_post_lock_switch_ainline();
 }
 #endif /* !MODULE */
 
