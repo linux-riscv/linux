@@ -487,18 +487,18 @@ static int plic_parse_nr_irqs_and_contexts(struct fwnode_handle *fwnode,
 }
 
 static int plic_parse_context_parent(struct fwnode_handle *fwnode, u32 context,
-				     u32 *parent_hwirq, int *parent_cpu, u32 id)
+				     u32 *parent_hwirq, int *parent_cpu, u32 id,
+				     unsigned long *hartid)
 {
 	struct of_phandle_args parent;
-	unsigned long hartid;
 	int rc;
 
 	if (!is_of_node(fwnode)) {
-		hartid = acpi_rintc_ext_parent_to_hartid(id, context);
-		if (hartid == INVALID_HARTID)
+		*hartid = acpi_rintc_ext_parent_to_hartid(id, context);
+		if (*hartid == INVALID_HARTID)
 			return -EINVAL;
 
-		*parent_cpu = riscv_hartid_to_cpuid(hartid);
+		*parent_cpu = riscv_hartid_to_cpuid(*hartid);
 		*parent_hwirq = RV_IRQ_EXT;
 		return 0;
 	}
@@ -507,19 +507,19 @@ static int plic_parse_context_parent(struct fwnode_handle *fwnode, u32 context,
 	if (rc)
 		return rc;
 
-	rc = riscv_of_parent_hartid(parent.np, &hartid);
+	rc = riscv_of_parent_hartid(parent.np, hartid);
 	if (rc)
 		return rc;
 
 	*parent_hwirq = parent.args[0];
-	*parent_cpu = riscv_hartid_to_cpuid(hartid);
+	*parent_cpu = riscv_hartid_to_cpuid(*hartid);
 	return 0;
 }
 
 static int plic_probe(struct fwnode_handle *fwnode)
 {
 	int error = 0, nr_contexts, nr_handlers = 0, cpu, i;
-	unsigned long plic_quirks = 0;
+	unsigned long plic_quirks = 0, hartid;
 	struct plic_handler *handler;
 	u32 nr_irqs, parent_hwirq;
 	struct plic_priv *priv;
@@ -569,14 +569,15 @@ static int plic_probe(struct fwnode_handle *fwnode)
 
 	for (i = 0; i < nr_contexts; i++) {
 		error = plic_parse_context_parent(fwnode, i, &parent_hwirq, &cpu,
-						  priv->acpi_plic_id);
+						  priv->acpi_plic_id, &hartid);
 		if (error) {
 			pr_warn("%pfwP: hwirq for context%d not found\n", fwnode, i);
 			continue;
 		}
 
 		if (is_of_node(fwnode)) {
-			context_id = i;
+			/* each hart has two contexts: M-mode and S-mode */
+			context_id = hartid * 2 + i % 2;
 		} else {
 			context_id = acpi_rintc_get_plic_context(priv->acpi_plic_id, i);
 			if (context_id == INVALID_CONTEXT) {
@@ -594,7 +595,7 @@ static int plic_probe(struct fwnode_handle *fwnode)
 			if (IS_ENABLED(CONFIG_RISCV_M_MODE)) {
 				void __iomem *enable_base = priv->regs +
 					CONTEXT_ENABLE_BASE +
-					i * CONTEXT_ENABLE_SIZE;
+					context_id * CONTEXT_ENABLE_SIZE;
 
 				for (hwirq = 1; hwirq <= nr_irqs; hwirq++)
 					__plic_toggle(enable_base, hwirq, 0);
@@ -694,7 +695,8 @@ done:
 
 fail_cleanup_contexts:
 	for (i = 0; i < nr_contexts; i++) {
-		if (plic_parse_context_parent(fwnode, i, &parent_hwirq, &cpu, priv->acpi_plic_id))
+		if (plic_parse_context_parent(fwnode, i, &parent_hwirq, &cpu,
+					      priv->acpi_plic_id, &hartid))
 			continue;
 		if (parent_hwirq != RV_IRQ_EXT || cpu < 0)
 			continue;
