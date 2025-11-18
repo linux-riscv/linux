@@ -276,6 +276,17 @@ static inline int get_boot_cpu_id(void)
 #define put_cpu()		preempt_enable()
 
 /*
+ * The number of CPUs online, not counting this CPU (which may not be
+ * fully online and so not counted in num_online_cpus()).
+ */
+static inline unsigned int num_other_online_cpus(void)
+{
+	unsigned int this_cpu_online = cpu_online(smp_processor_id());
+
+	return num_online_cpus() - this_cpu_online;
+}
+
+/*
  * Callback to arch code if there's nosmp or maxcpus=0 on the
  * boot command line:
  */
