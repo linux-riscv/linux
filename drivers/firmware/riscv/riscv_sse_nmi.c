@@ -55,6 +55,7 @@ static int local_nmi_handler(u32 evt, void *arg, struct pt_regs *regs)
 	unsigned int cpu = smp_processor_id();
 
 	NMI_HANDLE(LOCAL_NMI_CRASH, cpu_crash_stop, cpu, regs);
+	NMI_HANDLE(LOCAL_NMI_STOP, cpu_stop);
 
 	atomic_set(&local_nmi_arg, LOCAL_NMI_NONE);
 

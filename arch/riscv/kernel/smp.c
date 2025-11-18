@@ -80,7 +80,7 @@ int riscv_hartid_to_cpuid(unsigned long hartid)
 	return -ENOENT;
 }
 
-static void ipi_stop(void)
+void cpu_stop(void)
 {
 	set_cpu_online(smp_processor_id(), false);
 	while (1)
@@ -138,7 +138,7 @@ static irqreturn_t handle_IPI(int irq, void *data)
 		generic_smp_call_function_interrupt();
 		break;
 	case IPI_CPU_STOP:
-		ipi_stop();
+		cpu_stop();
 		break;
 	case IPI_CPU_CRASH_STOP:
 		cpu_crash_stop(cpu, get_irq_regs());
@@ -250,10 +250,9 @@ void tick_broadcast(const struct cpumask *mask)
 void smp_send_stop(void)
 {
 	unsigned long timeout;
+	cpumask_t mask;
 
 	if (num_online_cpus() > 1) {
-		cpumask_t mask;
-
 		cpumask_copy(&mask, cpu_online_mask);
 		cpumask_clear_cpu(smp_processor_id(), &mask);
 
@@ -266,6 +265,22 @@ void smp_send_stop(void)
 	timeout = USEC_PER_SEC;
 	while (num_online_cpus() > 1 && timeout--)
 		udelay(1);
+
+	/*
+	 * If CPUs are still online, try an NMI. There's no excuse for this to
+	 * be slow, so we only give them an extra 10 ms to respond.
+	 */
+	if (num_other_online_cpus()) {
+		smp_rmb();
+		cpumask_copy(&mask, cpu_online_mask);
+		cpumask_clear_cpu(smp_processor_id(), &mask);
+		pr_info("SMP: retry stop with NMI for CPUs %*pbl\n",
+			cpumask_pr_args(&mask));
+		send_nmi_mask(&mask, LOCAL_NMI_STOP);
+		timeout = USEC_PER_MSEC * 10;
+		while (num_other_online_cpus() && timeout--)
+			udelay(1);
+	}
 
 	if (num_online_cpus() > 1)
 		pr_warn("SMP: failed to stop secondary CPUs %*pbl\n",

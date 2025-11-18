@@ -63,6 +63,8 @@ static inline void cpu_crash_stop(unsigned int cpu, struct pt_regs *regs)
 }
 #endif
 
+void cpu_stop(void);
+
 /* Secondary hart entry */
 asmlinkage void smp_callin(void);
 
