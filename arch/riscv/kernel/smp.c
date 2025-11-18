@@ -16,6 +16,7 @@
 #include <linux/kgdb.h>
 #include <linux/percpu.h>
 #include <linux/profile.h>
+#include <linux/riscv_sse_nmi.h>
 #include <linux/smp.h>
 #include <linux/sched.h>
 #include <linux/seq_file.h>
@@ -300,7 +301,18 @@ void crash_smp_send_stop(void)
 	atomic_set(&waiting_for_crash_ipi, num_other_online_cpus());
 
 	pr_crit("SMP: stopping secondary CPUs\n");
-	send_ipi_mask(&mask, IPI_CPU_CRASH_STOP);
+
+	/*
+	 * IPI performs better than NMI, but attempting IPI first and
+	 * falling back to NMI on failure requires recording CPUs that failed
+	 * to stop. This adds complexity to cpu_crash_stop(). Since this operation
+	 * is rare and typically in the final phase, directly replace IPI
+	 * with NMI.
+	 */
+	if (!nmi_support())
+		send_ipi_mask(&mask, IPI_CPU_CRASH_STOP);
+	else
+		send_nmi_mask(&mask, LOCAL_NMI_CRASH);
 
 	/* Wait up to one second for other CPUs to stop */
 	timeout = USEC_PER_SEC;

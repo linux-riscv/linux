@@ -10,6 +10,9 @@
 #include <asm/sbi.h>
 #include <asm/smp.h>
 
+#define NMI_HANDLE(mask, func, ...) \
+	do { if (type & (mask)) func(__VA_ARGS__); } while (0)
+
 bool nmi_available;
 static struct sse_event *local_nmi_evt;
 static atomic_t local_nmi_arg = ATOMIC_INIT(LOCAL_NMI_NONE);
@@ -48,6 +51,13 @@ void send_nmi_mask(cpumask_t *mask, enum local_nmi_type type)
 
 static int local_nmi_handler(u32 evt, void *arg, struct pt_regs *regs)
 {
+	enum local_nmi_type type = atomic_read((atomic_t *)arg);
+	unsigned int cpu = smp_processor_id();
+
+	NMI_HANDLE(LOCAL_NMI_CRASH, cpu_crash_stop, cpu, regs);
+
+	atomic_set(&local_nmi_arg, LOCAL_NMI_NONE);
+
 	return 0;
 }
 
