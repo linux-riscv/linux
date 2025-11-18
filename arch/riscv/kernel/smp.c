@@ -382,7 +382,10 @@ void kgdb_roundup_cpus(void)
 		if (cpu == this_cpu)
 			continue;
 
-		send_ipi_single(cpu, IPI_KGDB_ROUNDUP);
+		if (!nmi_support())
+			send_ipi_single(cpu, IPI_KGDB_ROUNDUP);
+		else
+			send_nmi_single(cpu, LOCAL_NMI_KGDB);
 	}
 }
 #endif
