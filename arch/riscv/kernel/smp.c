@@ -356,9 +356,19 @@ static void riscv_backtrace_ipi(cpumask_t *mask)
 	send_ipi_mask(mask, IPI_CPU_BACKTRACE);
 }
 
+static void riscv_backtrace_nmi(cpumask_t *mask)
+{
+	send_nmi_mask(mask, LOCAL_NMI_BACKTRACE);
+}
+
 void arch_trigger_cpumask_backtrace(const cpumask_t *mask, int exclude_cpu)
 {
-	nmi_trigger_cpumask_backtrace(mask, exclude_cpu, riscv_backtrace_ipi);
+	if (!nmi_support())
+		nmi_trigger_cpumask_backtrace(mask, exclude_cpu,
+					      riscv_backtrace_ipi);
+	else
+		nmi_trigger_cpumask_backtrace(mask, exclude_cpu,
+					      riscv_backtrace_nmi);
 }
 
 #ifdef CONFIG_KGDB
