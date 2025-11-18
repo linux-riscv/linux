@@ -7,6 +7,7 @@
 #include <linux/nmi.h>
 #include <linux/riscv_sbi_sse.h>
 #include <linux/riscv_sse_nmi.h>
+#include <linux/sysctl.h>
 
 #include <asm/irq_regs.h>
 #include <asm/sbi.h>
@@ -16,7 +17,10 @@
 	do { if (type & (mask)) func(__VA_ARGS__); } while (0)
 
 bool nmi_available;
+static int unknown_nmi_panic;
 static struct sse_event *local_nmi_evt;
+static struct sse_event *unknown_nmi_evt;
+static struct ctl_table_header *unknown_nmi_sysctl_header;
 static atomic_t local_nmi_arg = ATOMIC_INIT(LOCAL_NMI_NONE);
 
 bool nmi_support(void)
@@ -51,6 +55,35 @@ void send_nmi_mask(cpumask_t *mask, enum local_nmi_type type)
 		send_nmi_single(cpu, type);
 }
 
+static int __init setup_unknown_nmi_panic(char *str)
+{
+	unknown_nmi_panic = 1;
+	return 1;
+}
+__setup("unknown_nmi_panic", setup_unknown_nmi_panic);
+
+static const struct ctl_table unknown_nmi_table[] = {
+	{
+		.procname       = "unknown_nmi_panic",
+		.data           = &unknown_nmi_panic,
+		.maxlen         = sizeof(bool),
+		.mode           = 0644,
+		.proc_handler   = proc_dobool,
+	},
+};
+
+static int unknown_nmi_handler(u32 evt, void *arg, struct pt_regs *regs)
+{
+	pr_emerg("NMI received for unknown on CPU %d.\n", smp_processor_id());
+
+	if (unknown_nmi_panic)
+		nmi_panic(regs, "NMI: Not continuing");
+
+	pr_emerg("Dazed and confused, but trying to continue\n");
+
+	return 0;
+}
+
 static int local_nmi_handler(u32 evt, void *arg, struct pt_regs *regs)
 {
 	enum local_nmi_type type = atomic_read((atomic_t *)arg);
@@ -64,6 +97,35 @@ static int local_nmi_handler(u32 evt, void *arg, struct pt_regs *regs)
 	atomic_set(&local_nmi_arg, LOCAL_NMI_NONE);
 
 	return 0;
+}
+
+static int unknown_nmi_init(void)
+{
+	int ret;
+
+	unknown_nmi_evt = sse_event_register(SBI_SSE_EVENT_LOCAL_UNKNOWN_NMI, 0,
+					     unknown_nmi_handler, NULL);
+	if (IS_ERR(unknown_nmi_evt))
+		return PTR_ERR(unknown_nmi_evt);
+
+	ret = sse_event_enable(unknown_nmi_evt);
+	if (ret)
+		goto err_unregister;
+
+	unknown_nmi_sysctl_header = register_sysctl("kernel", unknown_nmi_table);
+	if (!unknown_nmi_sysctl_header) {
+		ret = -ENOMEM;
+		goto err_disable;
+	}
+
+	pr_info("Using SSE for unknown NMI event delivery\n");
+	return 0;
+
+err_disable:
+	sse_event_disable(unknown_nmi_evt);
+err_unregister:
+	sse_event_unregister(unknown_nmi_evt);
+	return ret;
 }
 
 static int __init local_nmi_init(void)
@@ -97,6 +159,12 @@ static int __init sse_nmi_init(void)
 	}
 
 	WRITE_ONCE(nmi_available, true);
+
+	ret = unknown_nmi_init();
+	if (ret) {
+		pr_err("Unknown_nmi_init failed with error %d\n", ret);
+		return ret;
+	}
 
 	return 0;
 }
