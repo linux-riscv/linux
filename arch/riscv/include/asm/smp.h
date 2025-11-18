@@ -54,6 +54,15 @@ void riscv_ipi_set_virq_range(int virq, int nr);
 /* Check other CPUs stop or not */
 bool smp_crash_stop_failed(void);
 
+#ifdef CONFIG_KEXEC_CORE
+void cpu_crash_stop(unsigned int cpu, struct pt_regs *regs);
+#else
+static inline void cpu_crash_stop(unsigned int cpu, struct pt_regs *regs)
+{
+	unreachable();
+}
+#endif
+
 /* Secondary hart entry */
 asmlinkage void smp_callin(void);
 
