@@ -770,6 +770,7 @@
 #define MACB_CAPS_QUEUE_DISABLE			0x00000800
 #define MACB_CAPS_QBV				0x00001000
 #define MACB_CAPS_USRIO_HAS_MII			0x00002000
+#define MACB_CAPS_USRIO_TSUCLK_SOURCE		0x00004000
 #define MACB_CAPS_PCS				0x01000000
 #define MACB_CAPS_HIGH_SPEED			0x02000000
 #define MACB_CAPS_CLK_HW_CHG			0x04000000
@@ -1217,6 +1218,7 @@ struct macb_usrio_config {
 	u32 rgmii;
 	u32 refclk;
 	u32 hdfctlen;
+	u32 tsu_source;
 };
 
 struct macb_config {
