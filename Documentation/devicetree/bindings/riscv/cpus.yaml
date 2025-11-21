@@ -65,6 +65,7 @@ properties:
               - thead,c908
               - thead,c910
               - thead,c920
+              - xuantie,c930
           - const: riscv
       - items:
           - enum:
