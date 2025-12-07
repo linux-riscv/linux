@@ -28,6 +28,8 @@ struct alloc_tag_counters {
 struct alloc_tag {
 	struct codetag			ct;
 	struct alloc_tag_counters __percpu	*counters;
+	u64    ts;
+	// TODO core id
 } __aligned(8);
 
 struct alloc_tag_kernel_section {

@@ -260,6 +260,8 @@ static void __init setup_bootmem(void)
 	if (IS_ENABLED(CONFIG_64BIT) && IS_ENABLED(CONFIG_MMU))
 		kernel_map.va_pa_offset = PAGE_OFFSET - phys_ram_base;
 
+	pr_err("init dram = %lx\n", (unsigned long)virt_to_phys((void *)0xffffaf8000000000ULL));
+
 	/*
 	 * The size of the linear page mapping may restrict the amount of
 	 * usable RAM.

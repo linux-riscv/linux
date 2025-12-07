@@ -454,6 +454,7 @@ get_pfnblock_migratetype(const struct page *page, unsigned long pfn)
 #endif
 	return flags & MIGRATETYPE_MASK;
 }
+EXPORT_SYMBOL(get_pfnblock_migratetype);
 
 /**
  * __set_pfnblock_flags_mask - Set the requested group of flags for
