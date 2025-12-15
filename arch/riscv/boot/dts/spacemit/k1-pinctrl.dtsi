@@ -537,4 +537,17 @@
 			drive-strength = <32>;
 		};
 	};
+
+	mmc1_cfg: mmc1-cfg {
+		mmc1-pins {
+			pinmux = <K1_PADCONF(92, 0)>,   /* mmc1_d3 */
+				 <K1_PADCONF(91, 0)>,   /* mmc1_d2 */
+				 <K1_PADCONF(90, 0)>,   /* mmc1_d1 */
+				 <K1_PADCONF(89, 0)>,   /* mmc1_d0 */
+				 <K1_PADCONF(113, 0)>,  /* mmc1_cmd */
+				 <K1_PADCONF(114, 0)>;  /* mmc1_clk */
+			bias-pull-up = <1>;
+			drive-strength = <21>;
+		};
+	};
 };
