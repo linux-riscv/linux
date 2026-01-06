@@ -143,6 +143,13 @@ properties:
       DMIPS/MHz, relative to highest capacity-dmips-mhz
       in the system.
 
+  performance-domains:
+    $ref: /schemas/types.yaml#/definitions/phandle-array
+    description:
+      A phandle and RPMI performance domain specifier, as defined by the
+      bindings of the referenced RPMI performance controller or provider.
+      (see riscv,rpmi-performance.yaml / riscv,rpmi-mpxy-performance.yaml)
+
 anyOf:
   - required:
       - riscv,isa
