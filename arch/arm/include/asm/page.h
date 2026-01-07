@@ -173,7 +173,7 @@ extern void copy_page(void *to, const void *from);
 
 #endif /* CONFIG_MMU */
 
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 
 #ifdef CONFIG_HAVE_ARCH_PFN_VALID
 extern int pfn_valid(unsigned long);

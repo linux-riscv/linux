@@ -58,7 +58,7 @@ typedef unsigned long pgprot_t;
 
 #endif /* STRICT_MM_TYPECHECKS */
 
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 
 #ifdef USE_48_BIT_KSEG
 #define PAGE_OFFSET		0xffff800000000000UL

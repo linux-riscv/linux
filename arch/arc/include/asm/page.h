@@ -82,7 +82,7 @@ typedef struct {
 #define __pgprot(x)	((pgprot_t) { (x) })
 #define pte_pgprot(x)	__pgprot(pte_val(x))
 
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 
 /*
  * When HIGHMEM is enabled we have holes in the memory map so we need

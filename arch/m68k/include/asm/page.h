@@ -31,7 +31,7 @@ typedef struct { unsigned long pgprot; } pgprot_t;
  * definition. It would be possible to unify Sun3 and ColdFire pgalloc and have
  * all of m68k use the same type.
  */
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 #else
 typedef pte_t *pgtable_t;
 #endif

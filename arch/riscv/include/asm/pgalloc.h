@@ -26,7 +26,7 @@ static inline void pmd_populate_kernel(struct mm_struct *mm,
 static inline void pmd_populate(struct mm_struct *mm,
 	pmd_t *pmd, pgtable_t pte)
 {
-	unsigned long pfn = virt_to_pfn(page_address(pte));
+	unsigned long pfn = virt_to_pfn(ptdesc_address(pte));
 
 	set_pmd(pmd, __pmd((pfn << _PAGE_PFN_SHIFT) | _PAGE_TABLE));
 }
@@ -133,7 +133,7 @@ static inline void __pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmd,
 static inline void __pte_free_tlb(struct mmu_gather *tlb, pgtable_t pte,
 				  unsigned long addr)
 {
-	tlb_remove_ptdesc(tlb, page_ptdesc(pte));
+	tlb_remove_ptdesc(tlb, pte);
 }
 #endif /* CONFIG_MMU */
 

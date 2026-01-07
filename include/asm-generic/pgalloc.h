@@ -81,7 +81,7 @@ static inline pgtable_t __pte_alloc_one_noprof(struct mm_struct *mm, gfp_t gfp)
 		return NULL;
 	}
 
-	return ptdesc_page(ptdesc);
+	return ptdesc;
 }
 #define __pte_alloc_one(...)	alloc_hooks(__pte_alloc_one_noprof(__VA_ARGS__))
 
@@ -111,11 +111,9 @@ static inline pgtable_t pte_alloc_one_noprof(struct mm_struct *mm)
  * @mm: the mm_struct of the current context
  * @pte_page: the `struct page` referencing the ptdesc
  */
-static inline void pte_free(struct mm_struct *mm, struct page *pte_page)
+static inline void pte_free(struct mm_struct *mm, struct ptdesc *pte_page)
 {
-	struct ptdesc *ptdesc = page_ptdesc(pte_page);
-
-	pagetable_dtor_free(ptdesc);
+	pagetable_dtor_free(pte_page);
 }
 
 

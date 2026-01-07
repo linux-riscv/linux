@@ -115,7 +115,7 @@ typedef struct { unsigned long pte; } pte_t;
 #define pte_val(x)	((x).pte)
 #define __pte(x)	((pte_t) { (x) } )
 #endif
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 
 /*
  * Right now we don't support 4-level pagetables, so all pud-related

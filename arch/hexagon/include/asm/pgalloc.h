@@ -48,7 +48,7 @@ static inline void pmd_populate(struct mm_struct *mm, pmd_t *pmd,
 	 * Conveniently, zero in 3 LSB means indirect 4K page table.
 	 * Not so convenient when you're trying to vary the page size.
 	 */
-	set_pmd(pmd, __pmd(((unsigned long)page_to_pfn(pte) << PAGE_SHIFT) |
+	set_pmd(pmd, __pmd(((unsigned long)page_to_pfn(ptdesc_page(pte)) << PAGE_SHIFT) |
 		HEXAGON_L1_PTE_SIZE));
 }
 

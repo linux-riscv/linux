@@ -83,7 +83,7 @@ typedef unsigned long pgprot_t;
 #define set_pud(pudptr, pudval) (*(pudptr) = (pudval))
 #endif
 
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 
 typedef struct __physmem_range {
 	unsigned long start_pfn;

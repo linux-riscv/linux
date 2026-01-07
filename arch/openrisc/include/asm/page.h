@@ -45,7 +45,7 @@ typedef struct {
 typedef struct {
 	unsigned long pgprot;
 } pgprot_t;
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 
 #define pte_val(x)	((x).pte)
 #define pgd_val(x)	((x).pgd)

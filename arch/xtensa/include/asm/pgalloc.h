@@ -24,7 +24,7 @@
 #define pmd_populate_kernel(mm, pmdp, ptep)				     \
 	(pmd_val(*(pmdp)) = ((unsigned long)ptep))
 #define pmd_populate(mm, pmdp, page)					     \
-	(pmd_val(*(pmdp)) = ((unsigned long)page_to_virt(page)))
+	(pmd_val(*(pmdp)) = ((unsigned long)page_to_virt(ptdesc_page(page))))
 
 static inline pgd_t*
 pgd_alloc(struct mm_struct *mm)
@@ -53,12 +53,12 @@ static inline pte_t *pte_alloc_one_kernel(struct mm_struct *mm)
 
 static inline pgtable_t pte_alloc_one(struct mm_struct *mm)
 {
-	struct page *page;
+	struct ptdesc *page;
 
 	page = __pte_alloc_one(mm, GFP_PGTABLE_USER);
 	if (!page)
 		return NULL;
-	ptes_clear(page_address(page));
+	ptes_clear(ptdesc_address(page));
 	return page;
 }
 

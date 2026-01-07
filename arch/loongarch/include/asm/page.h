@@ -45,7 +45,7 @@ void copy_user_highpage(struct page *to, struct page *from,
 typedef struct { unsigned long pte; } pte_t;
 #define pte_val(x)	((x).pte)
 #define __pte(x)	((pte_t) { (x) })
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 
 typedef struct { unsigned long pgd; } pgd_t;
 #define pgd_val(x)	((x).pgd)

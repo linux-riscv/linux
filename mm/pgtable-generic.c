@@ -170,9 +170,9 @@ void pgtable_trans_huge_deposit(struct mm_struct *mm, pmd_t *pmdp,
 
 	/* FIFO */
 	if (!pmd_huge_pte(mm, pmdp))
-		INIT_LIST_HEAD(&pgtable->lru);
+		INIT_LIST_HEAD(&pgtable->pt_list);
 	else
-		list_add(&pgtable->lru, &pmd_huge_pte(mm, pmdp)->lru);
+		list_add(&pgtable->pt_list, &pmd_huge_pte(mm, pmdp)->pt_list);
 	pmd_huge_pte(mm, pmdp) = pgtable;
 }
 #endif
@@ -187,10 +187,10 @@ pgtable_t pgtable_trans_huge_withdraw(struct mm_struct *mm, pmd_t *pmdp)
 
 	/* FIFO */
 	pgtable = pmd_huge_pte(mm, pmdp);
-	pmd_huge_pte(mm, pmdp) = list_first_entry_or_null(&pgtable->lru,
-							  struct page, lru);
+	pmd_huge_pte(mm, pmdp) = list_first_entry_or_null(&pgtable->pt_list,
+							  struct ptdesc, pt_list);
 	if (pmd_huge_pte(mm, pmdp))
-		list_del(&pgtable->lru);
+		list_del(&pgtable->pt_list);
 	return pgtable;
 }
 #endif
@@ -247,10 +247,7 @@ static void pte_free_now(struct rcu_head *head)
 
 void pte_free_defer(struct mm_struct *mm, pgtable_t pgtable)
 {
-	struct page *page;
-
-	page = pgtable;
-	call_rcu(&page->rcu_head, pte_free_now);
+	call_rcu(&pgtable->pt_rcu_head, pte_free_now);
 }
 #endif /* pte_free_defer */
 #endif /* CONFIG_TRANSPARENT_HUGEPAGE */

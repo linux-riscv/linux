@@ -96,12 +96,12 @@ pte_alloc_one(struct mm_struct *mm)
 {
 	struct page *pte;
 
-	pte = __pte_alloc_one(mm, GFP_PGTABLE_USER | PGTABLE_HIGHMEM);
+	pte = ptdesc_page(__pte_alloc_one(mm, GFP_PGTABLE_USER | PGTABLE_HIGHMEM));
 	if (!pte)
 		return NULL;
 	if (!PageHighMem(pte))
 		clean_pte_table(page_address(pte));
-	return pte;
+	return page_ptdesc(pte);
 }
 
 static inline void __pmd_populate(pmd_t *pmdp, phys_addr_t pte,
@@ -141,7 +141,7 @@ pmd_populate(struct mm_struct *mm, pmd_t *pmdp, pgtable_t ptep)
 	else
 		prot = _PAGE_USER_TABLE;
 
-	__pmd_populate(pmdp, page_to_phys(ptep), prot);
+	__pmd_populate(pmdp, page_to_phys(ptdesc_page(ptep)), prot);
 }
 
 #endif /* CONFIG_MMU */

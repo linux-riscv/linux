@@ -513,7 +513,7 @@ static inline pgprot_t pgprot_large_2_4k(pgprot_t pgprot)
 }
 
 
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 
 extern pteval_t __supported_pte_mask;
 extern pteval_t __default_kernel_pte_mask;

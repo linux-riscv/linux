@@ -47,7 +47,7 @@
  * via their respective <asm/pgtable.h>.
  */
 #ifndef pmd_pgtable
-#define pmd_pgtable(pmd) pmd_page(pmd)
+#define pmd_pgtable(pmd) page_ptdesc(pmd_page(pmd))
 #endif
 
 #define pmd_folio(pmd) page_folio(pmd_page(pmd))

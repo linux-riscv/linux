@@ -15,9 +15,9 @@
 #define pmd_populate_kernel(mm, pmd, pte) \
 	set_pmd(pmd, __pmd(_PAGE_TABLE + (unsigned long) __pa(pte)))
 
-#define pmd_populate(mm, pmd, pte) 				\
-	set_pmd(pmd, __pmd(_PAGE_TABLE +			\
-		((unsigned long long)page_to_pfn(pte) <<	\
+#define pmd_populate(mm, pmd, pte) 					\
+	set_pmd(pmd, __pmd(_PAGE_TABLE +				\
+		((unsigned long long)page_to_pfn(ptdesc_page(pte)) <<	\
 			(unsigned long long) PAGE_SHIFT)))
 
 /*
@@ -26,7 +26,7 @@
 extern pgd_t *pgd_alloc(struct mm_struct *);
 
 #define __pte_free_tlb(tlb, pte, address)	\
-	tlb_remove_ptdesc((tlb), page_ptdesc(pte))
+	tlb_remove_ptdesc((tlb), pte)
 
 #if CONFIG_PGTABLE_LEVELS > 2
 

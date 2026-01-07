@@ -52,7 +52,7 @@ typedef unsigned long pte_basic_t;
 /*
  * These are used to make use of C type-checking..
  */
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 typedef struct { unsigned long	pte; }		pte_t;
 typedef struct { unsigned long	pgprot; }	pgprot_t;
 /* FIXME this can depend on linux kernel version */

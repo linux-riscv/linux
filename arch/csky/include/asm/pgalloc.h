@@ -19,7 +19,7 @@ static inline void pmd_populate_kernel(struct mm_struct *mm, pmd_t *pmd,
 static inline void pmd_populate(struct mm_struct *mm, pmd_t *pmd,
 					pgtable_t pte)
 {
-	set_pmd(pmd, __pmd(__pa(page_address(pte))));
+	set_pmd(pmd, __pmd(__pa(ptdesc_address(pte))));
 }
 
 extern void pgd_init(unsigned long *p);

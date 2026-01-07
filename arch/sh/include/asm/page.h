@@ -81,7 +81,7 @@ typedef struct { unsigned long pgd; } pgd_t;
 #define __pgd(x) ((pgd_t) { (x) } )
 #define __pgprot(x)	((pgprot_t) { (x) } )
 
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 
 #define pte_pgprot(x) __pgprot(pte_val(x) & PTE_FLAGS_MASK)
 

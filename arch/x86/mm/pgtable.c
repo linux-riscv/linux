@@ -18,10 +18,10 @@ pgtable_t pte_alloc_one(struct mm_struct *mm)
 	return __pte_alloc_one(mm, GFP_PGTABLE_USER);
 }
 
-void ___pte_free_tlb(struct mmu_gather *tlb, struct page *pte)
+void ___pte_free_tlb(struct mmu_gather *tlb, struct ptdesc *pte)
 {
-	paravirt_release_pte(page_to_pfn(pte));
-	tlb_remove_ptdesc(tlb, page_ptdesc(pte));
+	paravirt_release_pte(page_to_pfn(ptdesc_page(pte)));
+	tlb_remove_ptdesc(tlb, pte);
 }
 
 #if CONFIG_PGTABLE_LEVELS > 2

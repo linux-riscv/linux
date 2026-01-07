@@ -52,7 +52,7 @@ extern void copy_user_page(void *vto, void *vfrom, unsigned long vaddr,
 /*
  * These are used to make use of C type-checking.
  */
-typedef struct page *pgtable_t;
+typedef struct ptdesc *pgtable_t;
 typedef struct { unsigned long pte; } pte_t;
 typedef struct { unsigned long pgd; } pgd_t;
 typedef struct { unsigned long pgprot; } pgprot_t;
