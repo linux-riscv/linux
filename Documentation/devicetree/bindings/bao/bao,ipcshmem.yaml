@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/bao/bao,ipcshmem.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Bao IPC Shared Memory Device
+
+maintainers:
+  - José Martins <jose@osyx.tech>
+  - David Cerdeira <davidmcerdeira@osyx.tech>
+  - João Peixoto <joaopeixoto@osyx.tech>
+
+description: |
+  Shared memory based communication device for Bao hypervisor guests.
+
+  The device describes a set of shared-memory regions used for
+  communication between Bao guests. Each guest instantiating this
+  device uses one region for reading data produced by a peer guest
+  and another region for writing data consumed by that peer.
+
+properties:
+  compatible:
+    const: bao,ipcshmem
+
+  reg:
+    description:
+      Shared memory region used for IPC.
+    minItems: 2
+    maxItems: 2
+
+  read-channel:
+    description: |
+      Shared-memory sub-region that this guest reads from.
+
+      This region is written by the peer Bao guest and read by the
+      guest instantiating this device.
+
+      Consists of two cells:
+        - offset into the shared-memory region defined by `reg`
+        - size in bytes
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 2
+    maxItems: 2
+
+  write-channel:
+    description: |
+      Shared-memory sub-region that this guest writes to.
+
+      This region is written by the guest instantiating this device and
+      read by the peer Bao guest.
+
+      Consists of two cells:
+        - offset into the shared-memory region defined by `reg`
+        - size in bytes
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 2
+    maxItems: 2
+
+  id:
+    description:
+      Driver instance ID.
+    $ref: /schemas/types.yaml#/definitions/uint32
+
+required:
+  - compatible
+  - reg
+  - read-channel
+  - write-channel
+  - id
+
+additionalProperties: false
+
+examples:
+  - |
+    bao-ipc@f0000000 {
+        compatible = "bao,ipcshmem";
+        reg = <0x0 0xf0000000 0x0 0x00010000>;
+        read-channel = <0x0 0x2000>;
+        write-channel = <0x2000 0x2000>;
+        id = <0>;
+    };
