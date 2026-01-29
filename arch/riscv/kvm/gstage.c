@@ -11,13 +11,8 @@
 #include <linux/pgtable.h>
 #include <asm/kvm_gstage.h>
 
-#ifdef CONFIG_64BIT
-unsigned long kvm_riscv_gstage_mode __ro_after_init = HGATP_MODE_SV39X4;
-unsigned long kvm_riscv_gstage_pgd_levels __ro_after_init = 3;
-#else
-unsigned long kvm_riscv_gstage_mode __ro_after_init = HGATP_MODE_SV32X4;
-unsigned long kvm_riscv_gstage_pgd_levels __ro_after_init = 2;
-#endif
+unsigned long kvm_riscv_gstage_mode __ro_after_init;
+unsigned long kvm_riscv_gstage_pgd_levels __ro_after_init;
 
 #define gstage_pte_leaf(__ptep)	\
 	(pte_val(*(__ptep)) & (_PAGE_READ | _PAGE_WRITE | _PAGE_EXEC))
@@ -313,47 +308,38 @@ next:
 	}
 }
 
-void __init kvm_riscv_gstage_mode_detect(void)
+static inline unsigned long __init __kvm_riscv_gstage_mode_detect(void)
 {
 #ifdef CONFIG_64BIT
-	/* Try Sv57x4 G-stage mode */
-	csr_write(CSR_HGATP, HGATP_MODE_SV57X4 << HGATP_MODE_SHIFT);
-	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) == HGATP_MODE_SV57X4) {
-		kvm_riscv_gstage_mode = HGATP_MODE_SV57X4;
-		kvm_riscv_gstage_pgd_levels = 5;
-		goto done;
-	}
-
-	/* Try Sv48x4 G-stage mode */
-	csr_write(CSR_HGATP, HGATP_MODE_SV48X4 << HGATP_MODE_SHIFT);
-	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) == HGATP_MODE_SV48X4) {
-		kvm_riscv_gstage_mode = HGATP_MODE_SV48X4;
-		kvm_riscv_gstage_pgd_levels = 4;
-		goto done;
-	}
-
-	/* Try Sv39x4 G-stage mode */
 	csr_write(CSR_HGATP, HGATP_MODE_SV39X4 << HGATP_MODE_SHIFT);
-	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) == HGATP_MODE_SV39X4) {
-		kvm_riscv_gstage_mode = HGATP_MODE_SV39X4;
-		kvm_riscv_gstage_pgd_levels = 3;
-		goto done;
-	}
+	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) != HGATP_MODE_SV39X4)
+		return HGATP_MODE_OFF;
+
+	csr_write(CSR_HGATP, HGATP_MODE_SV48X4 << HGATP_MODE_SHIFT);
+	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) != HGATP_MODE_SV48X4)
+		return HGATP_MODE_SV39X4;
+
+	csr_write(CSR_HGATP, HGATP_MODE_SV57X4 << HGATP_MODE_SHIFT);
+	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) != HGATP_MODE_SV57X4)
+		return HGATP_MODE_SV48X4;
+
+	return HGATP_MODE_SV57X4;
 #else /* CONFIG_32BIT */
-	/* Try Sv32x4 G-stage mode */
 	csr_write(CSR_HGATP, HGATP_MODE_SV32X4 << HGATP_MODE_SHIFT);
-	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) == HGATP_MODE_SV32X4) {
-		kvm_riscv_gstage_mode = HGATP_MODE_SV32X4;
-		kvm_riscv_gstage_pgd_levels = 2;
-		goto done;
-	}
+	if ((csr_read(CSR_HGATP) >> HGATP_MODE_SHIFT) != HGATP_MODE_SV32X4)
+		return HGATP_MODE_OFF;
+
+	return HGATP_MODE_SV32X4;
 #endif
+}
 
-	/* KVM depends on !HGATP_MODE_OFF */
-	kvm_riscv_gstage_mode = HGATP_MODE_OFF;
-	kvm_riscv_gstage_pgd_levels = 0;
+/* We could probably omit the HGATP write and fence. */
+unsigned long __init kvm_riscv_gstage_mode_detect(void)
+{
+	unsigned long gstage_mode = __kvm_riscv_gstage_mode_detect();
 
-done:
 	csr_write(CSR_HGATP, 0);
 	kvm_riscv_local_hfence_gvma_all();
+
+	return gstage_mode;
 }

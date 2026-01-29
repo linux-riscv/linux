@@ -104,19 +104,23 @@ static int __init riscv_kvm_init(void)
 	if (rc && rc != -ENODEV)
 		return rc;
 
-	kvm_riscv_gstage_mode_detect();
+	kvm_riscv_gstage_mode = kvm_riscv_gstage_mode_detect();
 	switch (kvm_riscv_gstage_mode) {
 	case HGATP_MODE_SV32X4:
 		str = "Sv32x4";
+		kvm_riscv_gstage_pgd_levels = 2;
 		break;
 	case HGATP_MODE_SV39X4:
 		str = "Sv39x4";
+		kvm_riscv_gstage_pgd_levels = 3;
 		break;
 	case HGATP_MODE_SV48X4:
 		str = "Sv48x4";
+		kvm_riscv_gstage_pgd_levels = 4;
 		break;
 	case HGATP_MODE_SV57X4:
 		str = "Sv57x4";
+		kvm_riscv_gstage_pgd_levels = 5;
 		break;
 	default:
 		kvm_riscv_nacl_exit();
