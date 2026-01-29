@@ -584,6 +584,81 @@ static void riscv_iommu_hpm_reset(struct riscv_iommu_hpm *iommu_hpm)
 	riscv_iommu_hpm_interrupt_clear(iommu_hpm);
 }
 
+static int riscv_iommu_hpm_init_vendor_events(struct riscv_iommu_hpm *iommu_hpm,
+					      struct attribute ***vendor_attrs)
+{
+	struct device *dev = iommu_hpm->iommu->dev;
+	struct device_node *np = dev->of_node;
+	struct perf_pmu_events_attr *vendor_event_attrs;
+	struct attribute **attrs;
+	const char *event_str;
+	int num_events, i, j;
+	char *event_copy, *colon, *event_name;
+	u32 event_id;
+
+	*vendor_attrs = NULL;
+
+	if (!np)
+		return 0;
+
+	num_events = of_property_count_strings(np, "vendor-hpm-events");
+	if (num_events <= 0)
+		return 0;
+
+	attrs = devm_kcalloc(dev, num_events + 1, sizeof(*attrs), GFP_KERNEL);
+	if (!attrs)
+		return -ENOMEM;
+	vendor_event_attrs = devm_kcalloc(dev, num_events,
+					  sizeof(*vendor_event_attrs),
+					  GFP_KERNEL);
+	if (!vendor_event_attrs)
+		return -ENOMEM;
+
+	/*
+	 * Parse vendor events from device tree.
+	 * Format: "event-name:0xNN" where NN is hex event ID
+	 */
+	j = 0;
+	for (i = 0; i < num_events; i++) {
+		if (of_property_read_string_index(np, "vendor,hpm-events",
+						  i, &event_str))
+			continue;
+
+		event_copy = devm_kstrdup(dev, event_str, GFP_KERNEL);
+		if (!event_copy) {
+			dev_warn(dev, "HPM: Failed to copy string for vendor event '%s'\n",
+				 event_str);
+			continue;
+		}
+		colon = strchr(event_copy, ':');
+		if (colon) {
+			*colon = '\0';
+			event_name = colon + 1;
+		} else
+			event_name = event_copy;
+		if (kstrtou32(event_copy, 0, &event_id))
+			continue;
+		if (event_id >= RISCV_IOMMU_HPMEVENT_MAX)
+			continue;
+
+		sysfs_attr_init(&vendor_event_attrs[j].attr.attr);
+		vendor_event_attrs[j].attr.attr.name = event_name;
+		vendor_event_attrs[j].attr.attr.mode = 0444;
+		vendor_event_attrs[j].attr.show = riscv_iommu_hpm_event_show;
+		vendor_event_attrs[j].id = event_id;
+		attrs[j] = &vendor_event_attrs[j].attr.attr;
+		set_bit(event_id, iommu_hpm->supported_events);
+		dev_info(dev, "HPM: Registered vendor event '%s' (0x%x)\n",
+			 event_name, event_id);
+		j++;
+	}
+
+	attrs[j] = NULL;
+	*vendor_attrs = attrs;
+
+	return j;
+}
+
 static void riscv_iommu_hpm_set_standard_events(struct riscv_iommu_hpm *iommu_hpm)
 {
 	/* Cycles counter is always supported */
@@ -749,8 +824,10 @@ static void riscv_iommu_hpm_exit(void)
 int riscv_iommu_add_hpm(struct riscv_iommu_device *iommu)
 {
 	struct device *dev = iommu->dev;
+	struct attribute **vendor_attrs = NULL;
+	int num_vendor_events;
 	int irq;
-	int rc;
+	int rc, i;
 
 	if (!FIELD_GET(RISCV_IOMMU_CAPABILITIES_HPM, iommu->caps)) {
 		dev_dbg(dev, "HPM: Not supported\n");
@@ -773,6 +850,21 @@ int riscv_iommu_add_hpm(struct riscv_iommu_device *iommu)
 					   "riscv_iommu_hpm", -1);
 	if (rc < 0)
 		goto err_module;
+
+	num_vendor_events = riscv_iommu_hpm_init_vendor_events(&iommu->hpm,
+							       &vendor_attrs);
+	if (num_vendor_events > 0 && vendor_attrs) {
+		for (i = 0; i < num_vendor_events && vendor_attrs[i]; i++) {
+			rc = sysfs_add_file_to_group(&iommu->hpm.pmu.dev->kobj,
+						     vendor_attrs[i],
+						     "events");
+			if (rc)
+				dev_warn(dev,
+					 "HPM: Failed to create sysfs for vendor event '%s'\n",
+					 vendor_attrs[i]->name);
+		}
+	}
+
 	return 0;
 
 err_module:
