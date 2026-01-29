@@ -57,16 +57,41 @@ properties:
 
   interrupts:
     minItems: 1
-    maxItems: 4
+    maxItems: 68
     description:
       Wired interrupt vectors available for RISC-V IOMMU to notify the
       RISC-V HARTS. The cause to interrupt vector is software defined
       using IVEC IOMMU register.
+      Normally the number of interrupt vectors available is 4 for IOATS
+      civ/fiv/pmiv/piv interrupts. But for SpacemiT distributed IOMMU,
+      the number of interrupt vectors includes IOATC pmiv wired
+      interrupts and the maximum number of IOATCs can be up to 64.
+
+  interrupt-names:
+    minItems: 1
+    maxItems: 68
 
   msi-parent: true
 
   power-domains:
     maxItems: 1
+
+  vendor-hpm-events:
+    minItems: 1
+    maxItems: 120
+    description:
+      Each item defines a vendor specific event using the format of
+      "eventId[:eventName]", where the eventId is an integer filling the
+      eventID field of the iohpmevt register and the eventName is an
+      optional string used as the annotation of the event instead of the
+      default name "eventId".
+    $ref: /schemas/types.yaml#/definitions/string-array
+
+  global-filter:
+    type: boolean
+    description:
+      Indicate the filters programmed across iohpmevt registers are wired
+      together in hardware as a global filter applied to all HPM events.
 
 required:
   - compatible
@@ -144,4 +169,37 @@ examples:
                 #iommu-cells = <1>;
             };
         };
+    };
+
+  - |+
+    /* Example 5 (SpacemiT distributed IOMMU) */
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    iommu4: iommu@1bccd000 {
+        compatible = "qemu,riscv-iommu", "riscv,iommu";
+        reg = <0x1bccd000 0x1000>;
+        interrupts = <58 IRQ_TYPE_LEVEL_HIGH>, <58 IRQ_TYPE_LEVEL_HIGH>,
+                     <58 IRQ_TYPE_LEVEL_HIGH>, <58 IRQ_TYPE_LEVEL_HIGH>,
+                     <62 IRQ_TYPE_LEVEL_HIGH>, <63 IRQ_TYPE_LEVEL_HIGH>;
+        interrupt-names = "civ", "fiv", "ioats-pmiv", "piv",
+                          "ioatc0-pmiv", "ioatc1-pmiv";
+        interrupt-parent = <&saplic>;
+        #iommu-cells = <0x01>;
+        /* SpacemiT T100 features */
+        global-filter;
+        vendor-hpm-events = "0x10:pri_page_reqs",
+                            "0x11:ptw_cache_reqs",
+                            "0x12:dtw_cache_reqs",
+                            "0x15:all_trans_reqs",
+                            "0x20:dtw_cache_lkps",
+                            "0x28:s1l0_ptw_cache_lkps",
+                            "0x2A:s1l1_ptw_cache_lkps",
+                            "0x2C:s1l2_ptw_cache_lkps",
+                            "0x2E:s1l3_ptw_cache_lkps",
+                            "0x30:s2l0_ptw_cache_lkps",
+                            "0x32:s2l1_ptw_cache_lkps",
+                            "0x34:s2l2_ptw_cache_lkps",
+                            "0x36:s2l3_ptw_cache_lkps",
+                            "0x38:mtlb_lkps",
+                            "0x3A:utlb_lkps";
     };
