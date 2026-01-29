@@ -34,6 +34,8 @@ static int riscv_iommu_pci_probe(struct pci_dev *pdev, const struct pci_device_i
 {
 	struct device *dev = &pdev->dev;
 	struct riscv_iommu_device *iommu;
+	phys_addr_t reg_phys;
+	resource_size_t reg_size;
 	int rc, vec;
 
 	rc = pcim_enable_device(pdev);
@@ -43,7 +45,9 @@ static int riscv_iommu_pci_probe(struct pci_dev *pdev, const struct pci_device_i
 	if (!(pci_resource_flags(pdev, 0) & IORESOURCE_MEM))
 		return -ENODEV;
 
-	if (pci_resource_len(pdev, 0) < RISCV_IOMMU_REG_SIZE)
+	reg_phys = pci_resource_start(pdev, 0);
+	reg_size = pci_resource_len(pdev, 0);
+	if (reg_size < RISCV_IOMMU_REG_SIZE)
 		return -ENODEV;
 
 	rc = pcim_iomap_regions(pdev, BIT(0), pci_name(pdev));
@@ -56,6 +60,8 @@ static int riscv_iommu_pci_probe(struct pci_dev *pdev, const struct pci_device_i
 
 	iommu->dev = dev;
 	iommu->reg = pcim_iomap_table(pdev)[0];
+	iommu->reg_phys = reg_phys;
+	iommu->reg_size = reg_size;
 
 	pci_set_master(pdev);
 	dev_set_drvdata(dev, iommu);
@@ -91,7 +97,10 @@ static int riscv_iommu_pci_probe(struct pci_dev *pdev, const struct pci_device_i
 		riscv_iommu_writel(iommu, RISCV_IOMMU_REG_FCTL, iommu->fctl);
 	}
 
-	return riscv_iommu_init(iommu);
+	rc = riscv_iommu_init(iommu);
+	if (rc)
+		return rc;
+	return riscv_iommu_add_hpm(iommu);
 }
 
 static void riscv_iommu_pci_remove(struct pci_dev *pdev)
