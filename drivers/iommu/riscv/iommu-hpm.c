@@ -7,6 +7,7 @@
  *                 Lv Zheng <lv.zheng@spacemit.com>
  */
 
+#include <linux/platform_device.h>
 #include "iommu.h"
 
 #define to_iommu_hpm(p) (container_of(p, struct riscv_iommu_hpm, pmu))
@@ -30,6 +31,94 @@ static DEFINE_MUTEX(riscv_iommu_hpm_lock);
 static atomic_t riscv_iommu_hpm_ids = ATOMIC_INIT(0);
 static int cpuhp_state_num = -1;
 static int cpuhp_refcnt;
+
+struct riscv_iommu_ioatc_desc {
+	u32 offset;
+	int irq;
+	u32 index;
+};
+
+static int riscv_iommu_hpm_collect_ioatcs(struct riscv_iommu_device *iommu,
+					  struct riscv_iommu_ioatc_desc *descs,
+					  int max_desc)
+{
+	struct device *dev = iommu->dev;
+	struct device_node *np = dev->of_node;
+	struct platform_device *pdev = to_platform_device(dev);
+	int count = 0;
+	int i;
+	int *ioatc_irqs = NULL;
+
+	if (!descs || max_desc <= 0)
+		return 0;
+
+	if (np) {
+		int names_count = of_property_count_strings(np, "interrupt-names");
+		const char *name;
+		int irq_idx;
+		u32 ioatc_idx;
+
+		ioatc_irqs = kcalloc(MAX_RISCV_IOMMU_IOATC, sizeof(int), GFP_KERNEL);
+		if (!ioatc_irqs)
+			goto discover;
+
+		for (i = 0; i < names_count; i++) {
+			if (of_property_read_string_index(np, "interrupt-names",
+							  i, &name))
+				continue;
+
+			if (!strstr(name, "ioatc") || !strstr(name, "hpm"))
+				continue;
+
+			if (sscanf(name, "ioatc%u-hpm", &ioatc_idx) != 1)
+				continue;
+
+			if (ioatc_idx >= MAX_RISCV_IOMMU_IOATC)
+				continue;
+
+			if (i < iommu->irqs_count) {
+				irq_idx = iommu->irqs[i];
+				ioatc_irqs[ioatc_idx] = irq_idx;
+			} else {
+				irq_idx = platform_get_irq(pdev, i);
+				if (irq_idx < 0)
+					ioatc_irqs[ioatc_idx] = 0;
+				else
+					ioatc_irqs[ioatc_idx] = irq_idx;
+			}
+		}
+	}
+
+discover:
+	/* Automatically discover IOATCs by scanning DTISR registers */
+	for (i = 0; i < 4 && count < max_desc; i++) {
+		u32 dtisr = riscv_iommu_readl(iommu, RISCV_IOMMU_REG_DTISR(i));
+		int j;
+
+		for (j = 0; j < 16 && count < max_desc; j++) {
+			u32 idx = i * 16 + j;
+			u32 state;
+
+			state = (dtisr & RISCV_IOMMU_DTI_STS_MASK(idx)) >>
+				RISCV_IOMMU_DTI_STS_SHIFT(idx);
+			if (state == RISCV_IOMMU_DTI_STS_TBU_IOATC) {
+				descs[count].offset = (idx + 1) * RISCV_IOMMU_REG_SIZE;
+				descs[count].index = idx;
+
+				if (ioatc_irqs && idx < MAX_RISCV_IOMMU_IOATC &&
+				    ioatc_irqs[idx] > 0)
+					descs[count].irq = ioatc_irqs[idx];
+				else
+					descs[count].irq = 0;
+				count++;
+			}
+		}
+	}
+
+	kfree(ioatc_irqs);
+
+	return count;
+}
 
 static inline void riscv_iommu_hpm_writel(struct riscv_iommu_hpm *hpm, u32 reg,
 					  u32 val)
@@ -558,6 +647,43 @@ static const struct attribute_group *riscv_iommu_hpm_attr_grps[] = {
 	NULL
 };
 
+#define IOMMU_IOATC_EVENT_ATTR(_name, _id) \
+	PMU_EVENT_ATTR_ID(ioatc_##_name, riscv_iommu_hpm_event_show, _id)
+
+static struct attribute *riscv_iommu_ioatc_events[] = {
+	IOMMU_IOATC_EVENT_ATTR(untranslated_requests, 1),
+	IOMMU_IOATC_EVENT_ATTR(translated_requests, 2),
+	IOMMU_IOATC_EVENT_ATTR(tlb_miss, 4),
+	IOMMU_IOATC_EVENT_ATTR(translation_requests, 21),
+	IOMMU_IOATC_EVENT_ATTR(translations_issued, 24),
+	IOMMU_IOATC_EVENT_ATTR(transactions_unissued_slot_drain, 25),
+	IOMMU_IOATC_EVENT_ATTR(transactions_unissued_token_drain, 26),
+	IOMMU_IOATC_EVENT_ATTR(write_transactions_unissued_wb_full, 27),
+	IOMMU_IOATC_EVENT_ATTR(write_transactions_using_wb, 28),
+	IOMMU_IOATC_EVENT_ATTR(write_transactions_not_using_wb, 29),
+	IOMMU_IOATC_EVENT_ATTR(makeinvalid_downgrades, 30),
+	IOMMU_IOATC_EVENT_ATTR(stash_fails, 31),
+	IOMMU_IOATC_EVENT_ATTR(mtlb_lookups, 56),
+	IOMMU_IOATC_EVENT_ATTR(mtlb_misses, 57),
+	IOMMU_IOATC_EVENT_ATTR(utlb_lookups, 58),
+	IOMMU_IOATC_EVENT_ATTR(utlb_misses, 59),
+	IOMMU_IOATC_EVENT_ATTR(mtlb_reads, 65),
+	IOMMU_IOATC_EVENT_ATTR(mtlb_errors, 108),
+	NULL
+};
+
+static const struct attribute_group riscv_iommu_ioatc_events_group = {
+	.name = "events",
+	.attrs = riscv_iommu_ioatc_events,
+};
+
+static const struct attribute_group *riscv_iommu_ioatc_attr_grps[] = {
+	&riscv_iommu_hpm_cpumask_group,
+	&riscv_iommu_ioatc_events_group,
+	&riscv_iommu_hpm_format_group,
+	NULL
+};
+
 static irqreturn_t riscv_iommu_hpm_handle_irq(int irq_num, void *data)
 {
 	struct riscv_iommu_hpm *iommu_hpm = data;
@@ -748,6 +874,18 @@ static void riscv_iommu_hpm_set_standard_events(struct riscv_iommu_hpm *iommu_hp
 	set_bit(RISCV_IOMMU_HPMEVENT_G_WALKS, iommu_hpm->supported_events);
 }
 
+static void riscv_iommu_hpm_set_ioatc_events(struct riscv_iommu_hpm *iommu_hpm)
+{
+	static const unsigned int ioatc_event_ids[] = {
+		1, 2, 4, 21, 24, 25, 26, 27, 28, 29, 30, 31,
+		56, 57, 58, 59, 65, 108,
+	};
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(ioatc_event_ids); i++)
+		set_bit(ioatc_event_ids[i], iommu_hpm->supported_events);
+}
+
 static void riscv_iommu_hpm_remove(void *data)
 {
 	struct riscv_iommu_hpm *iommu_hpm = data;
@@ -758,7 +896,7 @@ static void riscv_iommu_hpm_remove(void *data)
 static int riscv_iommu_hpm_register_unit(struct riscv_iommu_device *iommu,
 					 struct riscv_iommu_hpm *iommu_hpm,
 					 u32 offset, int irq,
-					 bool global_filter,
+					 bool global_filter, bool ioatc,
 					 const struct attribute_group **attr_groups,
 					 const char *prefix, int index)
 {
@@ -797,7 +935,10 @@ static int riscv_iommu_hpm_register_unit(struct riscv_iommu_device *iommu,
 	iommu_hpm->on_cpu = raw_smp_processor_id();
 	iommu_hpm->irq = irq;
 
-	riscv_iommu_hpm_set_standard_events(iommu_hpm);
+	if (ioatc)
+		riscv_iommu_hpm_set_ioatc_events(iommu_hpm);
+	else
+		riscv_iommu_hpm_set_standard_events(iommu_hpm);
 	riscv_iommu_hpm_reset(iommu_hpm);
 
 	if (index >= 0)
@@ -902,8 +1043,9 @@ static void riscv_iommu_hpm_exit(void)
 int riscv_iommu_add_hpm(struct riscv_iommu_device *iommu)
 {
 	struct device *dev = iommu->dev;
+	struct riscv_iommu_ioatc_desc ioatcs[MAX_RISCV_IOMMU_IOATC];
 	struct attribute **vendor_attrs = NULL;
-	int num_vendor_events;
+	int ioatc_count, num_vendor_events;
 	int irq;
 	int rc, i;
 
@@ -924,7 +1066,7 @@ int riscv_iommu_add_hpm(struct riscv_iommu_device *iommu)
 		return rc;
 
 	rc = riscv_iommu_hpm_register_unit(iommu, &iommu->hpm,
-					   0, irq, true,
+					   0, irq, true, false,
 					   riscv_iommu_hpm_attr_grps,
 					   "riscv_iommu_hpm", -1);
 	if (rc < 0)
@@ -941,6 +1083,29 @@ int riscv_iommu_add_hpm(struct riscv_iommu_device *iommu)
 				dev_warn(dev,
 					 "HPM: Failed to create sysfs for vendor event '%s'\n",
 					 vendor_attrs[i]->name);
+		}
+	}
+
+	ioatc_count = riscv_iommu_hpm_collect_ioatcs(iommu, ioatcs,
+						     ARRAY_SIZE(ioatcs));
+	for (i = 0; i < ioatc_count; i++) {
+		struct riscv_iommu_hpm *extra;
+
+		extra = devm_kzalloc(dev, sizeof(*extra), GFP_KERNEL);
+		if (!extra)
+			continue;
+
+		rc = riscv_iommu_hpm_register_unit(iommu, extra,
+						   ioatcs[i].offset,
+						   ioatcs[i].irq,
+						   true, true,
+						   riscv_iommu_ioatc_attr_grps,
+						   "riscv_iommu_ioatc",
+						   ioatcs[i].index);
+		if (rc) {
+			dev_warn(dev,
+				 "HPM: Failed to register IOATC%u PMU: %d\n",
+				 ioatcs[i].index, rc);
 		}
 	}
 
