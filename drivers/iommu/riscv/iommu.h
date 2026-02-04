@@ -41,6 +41,7 @@ struct riscv_iommu_hpm {
 	int irq;
 	int on_cpu;
 	struct hlist_node node;
+	const char *identifier;
 	/*
 	 * Layout of events:
 	 * 0       -> HPMCYCLES
