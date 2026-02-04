@@ -32,6 +32,12 @@ properties:
   # should be specified along with 'reg' property providing MMIO location.
   compatible:
     oneOf:
+      - description: SpacemiT distributed IOMMUs
+        items:
+          - enum:
+              - spacemit,t100
+          - const: spacemit,riscv-iommu
+          - const: riscv,iommu
       - items:
           - enum:
               - qemu,riscv-iommu
@@ -74,6 +80,23 @@ required:
   - '#iommu-cells'
 
 additionalProperties: false
+
+select: false
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          contains:
+            const: spacemit,riscv-iommu
+    then:
+      properties:
+        interrupts:
+          maxItems: 68
+          description:
+            SpacemiT distributed IOMMU includes additional interrupts for
+            IOATCs. Each IOATC exposes pmiv wired vector as standalone
+            interrupt and the maximum number of IOATCs can be up to 64.
 
 examples:
   - |+
@@ -144,4 +167,18 @@ examples:
                 #iommu-cells = <1>;
             };
         };
+    };
+
+  - |+
+    /* Example 5 (SpacemiT distributed IOMMU) */
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    iommu4: iommu@1bccd000 {
+        compatible = "spacemit,t100", "spacemit,riscv-iommu", "riscv,iommu";
+        reg = <0x1bccd000 0x1000>;
+        interrupts = <58 IRQ_TYPE_LEVEL_HIGH>, <58 IRQ_TYPE_LEVEL_HIGH>,
+                     <58 IRQ_TYPE_LEVEL_HIGH>, <58 IRQ_TYPE_LEVEL_HIGH>,
+                     <62 IRQ_TYPE_LEVEL_HIGH>, <63 IRQ_TYPE_LEVEL_HIGH>;
+        interrupt-parent = <&saplic>;
+        #iommu-cells = <0x01>;
     };
