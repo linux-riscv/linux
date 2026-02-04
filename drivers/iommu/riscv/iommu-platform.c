@@ -62,6 +62,9 @@ static int riscv_iommu_platform_probe(struct platform_device *pdev)
 		return dev_err_probe(dev, PTR_ERR(iommu->reg),
 				     "could not map register region\n");
 
+	iommu->reg_phys = res->start;
+	iommu->reg_size = resource_size(res);
+
 	dev_set_drvdata(dev, iommu);
 
 	/* Check device reported capabilities / features. */
@@ -134,7 +137,10 @@ msi_fail:
 		return dev_err_probe(dev, -ENODEV, "invalid IGS\n");
 	}
 
-	return riscv_iommu_init(iommu);
+	ret = riscv_iommu_init(iommu);
+	if (ret)
+		return ret;
+	return riscv_iommu_add_hpm(iommu);
 };
 
 static void riscv_iommu_platform_remove(struct platform_device *pdev)

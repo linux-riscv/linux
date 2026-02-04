@@ -18,3 +18,12 @@ config RISCV_IOMMU_PCI
 	def_bool y if RISCV_IOMMU && PCI_MSI
 	help
 	  Support for the PCIe implementation of RISC-V IOMMU architecture.
+
+config RISCV_IOMMU_HPM
+	tristate "RISCV IOMMU HPM support"
+	depends on RISCV_IOMMU
+	help
+	  Provides support for the RISC-V IOMMU Hardware Performance Monitor
+	  (HPM), which provide monitoring of transactions passing through the
+	  IOMMU and allow the resulting information to be filtered based on
+	  the device/process ID of the corresponding master.
