@@ -42,6 +42,7 @@ struct riscv_iommu_hpm {
 	int on_cpu;
 	struct hlist_node node;
 	const char *identifier;
+	bool global_filter;
 	/*
 	 * Layout of events:
 	 * 0       -> HPMCYCLES
