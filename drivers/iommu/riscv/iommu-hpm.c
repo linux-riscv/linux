@@ -443,6 +443,30 @@ static const struct attribute_group riscv_iommu_hpm_cpumask_group = {
 	.attrs = riscv_iommu_hpm_cpumask_attrs,
 };
 
+static ssize_t riscv_iommu_hpm_identifier_show(struct device *dev,
+					       struct device_attribute *attr,
+					       char *buf)
+{
+	struct riscv_iommu_hpm *iommu_hpm = to_iommu_hpm(dev_get_drvdata(dev));
+
+	if (!iommu_hpm->identifier)
+		return 0;
+
+	return sysfs_emit(buf, "%s\n", iommu_hpm->identifier);
+}
+
+static struct device_attribute riscv_iommu_hpm_identifier_attr =
+	__ATTR(identifier, 0444, riscv_iommu_hpm_identifier_show, NULL);
+
+static struct attribute *riscv_iommu_hpm_identifier_attrs[] = {
+	&riscv_iommu_hpm_identifier_attr.attr,
+	NULL
+};
+
+static const struct attribute_group riscv_iommu_hpm_identifier_group = {
+	.attrs = riscv_iommu_hpm_identifier_attrs,
+};
+
 #define IOMMU_HPM_EVENT_ATTR(name, config)		\
 	PMU_EVENT_ATTR_ID(name, riscv_iommu_hpm_event_show, config)
 
@@ -518,6 +542,7 @@ static const struct attribute_group *riscv_iommu_hpm_attr_grps[] = {
 	&riscv_iommu_hpm_cpumask_group,
 	&riscv_iommu_hpm_events_group,
 	&riscv_iommu_hpm_format_group,
+	&riscv_iommu_hpm_identifier_group,
 	NULL
 };
 
@@ -620,6 +645,36 @@ static void riscv_iommu_hpm_reset(struct riscv_iommu_hpm *iommu_hpm)
 	riscv_iommu_hpm_interrupt_clear(iommu_hpm);
 }
 
+static bool riscv_iommu_hpm_is_identifier_compat(const char *compat)
+{
+	return !strcmp(compat, "riscv,iommu");
+}
+
+static const char *riscv_iommu_hpm_get_identifier(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	const char *compat;
+	int count, i;
+
+	if (!np)
+		return NULL;
+
+	count = of_property_count_strings(np, "compatible");
+	if (count <= 0)
+		return NULL;
+
+	for (i = 0; i < count; i++) {
+		if (of_property_read_string_index(np, "compatible",
+						  i, &compat))
+			continue;
+
+		if (riscv_iommu_hpm_is_identifier_compat(compat))
+			return devm_kstrdup(dev, compat, GFP_KERNEL);
+	}
+
+	return NULL;
+}
+
 static void riscv_iommu_hpm_set_standard_events(struct riscv_iommu_hpm *iommu_hpm)
 {
 	/* Cycles counter is always supported */
@@ -646,6 +701,7 @@ static void riscv_iommu_hpm_remove(void *data)
 static int riscv_iommu_hpm_register_unit(struct riscv_iommu_device *iommu,
 					 struct riscv_iommu_hpm *iommu_hpm,
 					 u32 offset, int irq,
+					 const char *identifier,
 					 const struct attribute_group **attr_groups,
 					 const char *prefix)
 {
@@ -659,6 +715,7 @@ static int riscv_iommu_hpm_register_unit(struct riscv_iommu_device *iommu,
 	unique_id = atomic_fetch_inc(&riscv_iommu_hpm_ids);
 	memset(iommu_hpm, 0, sizeof(*iommu_hpm));
 	iommu_hpm->iommu = iommu;
+	iommu_hpm->identifier = identifier;
 
 	if (offset + RISCV_IOMMU_REG_SIZE <= iommu->reg_size)
 		base = iommu->reg + offset;
@@ -788,6 +845,7 @@ static void riscv_iommu_hpm_exit(void)
 int riscv_iommu_add_hpm(struct riscv_iommu_device *iommu)
 {
 	struct device *dev = iommu->dev;
+	const char *identifier;
 	int irq, rc;
 
 	if (!FIELD_GET(RISCV_IOMMU_CAPABILITIES_HPM, iommu->caps)) {
@@ -806,7 +864,12 @@ int riscv_iommu_add_hpm(struct riscv_iommu_device *iommu)
 	if (rc < 0)
 		return rc;
 
+	identifier = riscv_iommu_hpm_get_identifier(dev);
+	if (identifier)
+		dev_info(dev, "HPM: Vendor identifier: %s\n", identifier);
+
 	rc = riscv_iommu_hpm_register_unit(iommu, &iommu->hpm, 0, irq,
+					   identifier,
 					   riscv_iommu_hpm_attr_grps,
 					   "riscv_iommu_hpm");
 	if (rc < 0)
