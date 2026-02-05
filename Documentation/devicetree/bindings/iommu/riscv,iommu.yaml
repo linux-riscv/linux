@@ -32,6 +32,12 @@ properties:
   # should be specified along with 'reg' property providing MMIO location.
   compatible:
     oneOf:
+      - description: SpacemiT distributed IOMMUs
+        items:
+          - enum:
+              - spacemit,t100
+          - const: spacemit,riscv-iommu
+          - const: riscv,iommu
       - items:
           - enum:
               - qemu,riscv-iommu
@@ -57,11 +63,21 @@ properties:
 
   interrupts:
     minItems: 1
-    maxItems: 4
+    maxItems: 68
     description:
       Wired interrupt vectors available for RISC-V IOMMU to notify the
       RISC-V HARTS. The cause to interrupt vector is software defined
-      using IVEC IOMMU register.
+      using ICVEC IOMMU register. For WSI only mode, the number of the
+      interrupt vectors should be 1 while for MSI possible mode, the
+      maximum of the interrupt vectors should be 4 with the cause indexed
+      as "CIV=0, FIV=1, PIV=2, PMIV=3".
+      SpacemiT distributed IOMMU includes additional interrupts for
+      IOATCs. Each IOATC exposes PMIV wired vector as standalone
+      interrupt and the maximum number of IOATCs can be up to 64. Thus for
+      WSI only mode, the maximum number of the interrupt vectors should be
+      65 while for MSI possible mode, the maximum number of the interrupt
+      vectors should be 68 with the cause indexed as "IOATS CIV=0,
+      IOATS FIV=1, IOATS PIV=2, IOATS PMIV=3, IOATC0..n PMIV=4..4+n".
 
   msi-parent: true
 
@@ -74,6 +90,18 @@ required:
   - '#iommu-cells'
 
 additionalProperties: false
+
+allOf:
+  - if:
+      properties:
+        compatible:
+          not:
+            contains:
+              const: spacemit,riscv-iommu
+    then:
+      properties:
+        interrupts:
+          maxItems: 4
 
 examples:
   - |+
@@ -144,4 +172,25 @@ examples:
                 #iommu-cells = <1>;
             };
         };
+    };
+
+  - |+
+    /* Example 5 (SpacemiT distributed IOMMU) */
+    #include <dt-bindings/interrupt-controller/irq.h>
+
+    iommu4: iommu@1bccd000 {
+        compatible = "spacemit,t100", "spacemit,riscv-iommu", "riscv,iommu";
+        reg = <0x1bccd000 0x1000>;
+        interrupts = <58 IRQ_TYPE_LEVEL_HIGH>,
+                     <62 IRQ_TYPE_LEVEL_HIGH>, <63 IRQ_TYPE_LEVEL_HIGH>,
+                     <62 IRQ_TYPE_LEVEL_HIGH>, <63 IRQ_TYPE_LEVEL_HIGH>;
+        interrupt-parent = <&saplic>;
+        #iommu-cells = <0x01>;
+    };
+
+    /* Device with four IOMMU device IDs */
+    master2 {
+        #iommu-cells = <1>;
+        iommus = <&iommu4 0xc0010>, <&iommu4 0xc0011>,
+                 <&iommu4 0xc0012>, <&iommu4 0xc0013>;
     };
