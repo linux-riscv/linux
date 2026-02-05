@@ -403,4 +403,7 @@ static inline pte_t pmd_pte(pmd_t pmd);
 static inline pte_t pud_pte(pud_t pud);
 #endif
 
+#define kc_vaddr_to_offset(v) ((v) & ((1UL << VA_BITS) - 1))
+#define kc_offset_to_vaddr(o) ((o) | ~((1UL << VA_BITS) - 1))
+
 #endif /* _ASM_RISCV_PGTABLE_64_H */
