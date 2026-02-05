@@ -31,6 +31,77 @@ static atomic_t riscv_iommu_hpm_ids = ATOMIC_INIT(0);
 static int cpuhp_state_num = -1;
 static int cpuhp_refcnt;
 
+struct riscv_iommu_ioatc_desc {
+	u32 offset;
+	int irq;
+	u32 index;
+};
+
+struct riscv_iommu_unit_info {
+	const char *identifier;
+	const char *ioats;
+	const char *ioatc;
+};
+
+#define RISCV_IOMMU_HPM_UNIT_EXTRACTOR(vid, pid, ioats)	\
+	{ #vid","#pid, #vid"_"#ioats"_hpm", #vid"_ioatc_hpm", }
+
+struct riscv_iommu_unit_info riscv_iommu_hpm_units[] = {
+	RISCV_IOMMU_HPM_UNIT_EXTRACTOR(riscv, iommu, iommu),
+	RISCV_IOMMU_HPM_UNIT_EXTRACTOR(spacemit, riscv-iommu, ioats),
+};
+
+static int riscv_iommu_hpm_collect_ioatcs(struct riscv_iommu_device *iommu,
+					  struct riscv_iommu_ioatc_desc *descs,
+					  int max_desc)
+{
+	struct device *dev = iommu->dev;
+	int count, index;
+	int i, j;
+	u32 dtisr, state;
+	int irq, nr_ioats_irqs, nr_ioatc_irqs;
+
+	if (!of_device_is_compatible(dev->of_node, "spacemit,riscv-iommu"))
+		return 0;
+
+	if (iommu->fctl & RISCV_IOMMU_FCTL_WSI)
+		nr_ioats_irqs = 1;
+	else
+		nr_ioats_irqs = RISCV_IOMMU_INTR_COUNT;
+
+	if (iommu->irqs_count > nr_ioats_irqs)
+		nr_ioatc_irqs = iommu->irqs_count - nr_ioats_irqs;
+	else
+		nr_ioatc_irqs = 0;
+
+	/* Automatically discover IOATCs by scanning DTISR registers and
+	 * assign IRQs.
+	 */
+	count = 0;
+	for (i = 0; i < 4 && count < max_desc; i++) {
+		dtisr = riscv_iommu_readl(iommu, RISCV_IOMMU_REG_DTISR(i));
+		for (j = 0; j < 16 && count < max_desc; j++) {
+			index = i * 16 + j;
+			state = (dtisr & RISCV_IOMMU_DTI_STS_MASK(index)) >>
+				RISCV_IOMMU_DTI_STS_SHIFT(index);
+			if (state != RISCV_IOMMU_DTI_STS_IOATC)
+				continue;
+			descs[count].offset = (index + 1) *
+					      RISCV_IOMMU_REG_SIZE;
+			descs[count].index = index;
+			if (count < nr_ioatc_irqs &&
+			    index < MAX_RISCV_IOMMU_IOATC)
+				irq = iommu->irqs[count + nr_ioats_irqs];
+			else
+				irq = 0;
+			descs[count].irq = irq;
+			count++;
+		}
+	}
+
+	return count;
+}
+
 static inline void riscv_iommu_hpm_writel(struct riscv_iommu_hpm *hpm, u32 reg,
 					  u32 val)
 {
@@ -599,6 +670,29 @@ static const struct attribute_group *riscv_iommu_hpm_attr_grps[] = {
 	NULL
 };
 
+#define IOMMU_IOATC_EVENT_ATTR(_name, _id) \
+	PMU_EVENT_ATTR_ID(_name, riscv_iommu_hpm_event_show, _id)
+
+static struct attribute *riscv_iommu_ioatc_events[] = {
+	IOMMU_IOATC_EVENT_ATTR(untrans_rq, RISCV_IOMMU_HPMEVENT_URQ),
+	IOMMU_IOATC_EVENT_ATTR(trans_rq, RISCV_IOMMU_HPMEVENT_TRQ),
+	IOMMU_IOATC_EVENT_ATTR(tlb_mis, RISCV_IOMMU_HPMEVENT_TLB_MISS),
+	NULL
+};
+
+static const struct attribute_group riscv_iommu_ioatc_events_group = {
+	.name = "events",
+	.attrs = riscv_iommu_ioatc_events,
+};
+
+static const struct attribute_group *riscv_iommu_ioatc_attr_grps[] = {
+	&riscv_iommu_hpm_cpumask_group,
+	&riscv_iommu_ioatc_events_group,
+	&riscv_iommu_hpm_format_group,
+	&riscv_iommu_hpm_identifier_group,
+	NULL
+};
+
 static irqreturn_t riscv_iommu_hpm_handle_irq(int irq_num, void *data)
 {
 	struct riscv_iommu_hpm *iommu_hpm = data;
@@ -700,7 +794,31 @@ static void riscv_iommu_hpm_reset(struct riscv_iommu_hpm *iommu_hpm)
 
 static bool riscv_iommu_hpm_is_identifier_compat(const char *compat)
 {
-	return !strcmp(compat, "riscv,iommu");
+	int i;
+	struct riscv_iommu_unit_info *info;
+
+	for (i = 0; i < ARRAY_SIZE(riscv_iommu_hpm_units); i++) {
+		info = &riscv_iommu_hpm_units[i];
+		if (!strcmp(info->identifier, compat))
+			return true;
+	}
+	return false;
+}
+
+static const char *riscv_iommu_hpm_get_unit(const char *identifier,
+					    bool ioatc)
+{
+	int i;
+	struct riscv_iommu_unit_info *info;
+
+	if (identifier) {
+		for (i = 0; i < ARRAY_SIZE(riscv_iommu_hpm_units); i++) {
+			info = &riscv_iommu_hpm_units[i];
+			if (!strcmp(info->identifier, identifier))
+				return ioatc ? info->ioatc : info->ioats;
+		}
+	}
+	return "riscv_iommu_hpm";
 }
 
 static const char *riscv_iommu_hpm_get_identifier(struct device *dev)
@@ -744,6 +862,14 @@ static void riscv_iommu_hpm_set_standard_events(struct riscv_iommu_hpm *iommu_hp
 	set_bit(RISCV_IOMMU_HPMEVENT_G_WALKS, iommu_hpm->supported_events);
 }
 
+static void riscv_iommu_hpm_set_ioatc_events(struct riscv_iommu_hpm *iommu_hpm)
+{
+	/* SpacemiT T100 IOATC compatible HPM events */
+	set_bit(RISCV_IOMMU_HPMEVENT_URQ, iommu_hpm->supported_events);
+	set_bit(RISCV_IOMMU_HPMEVENT_TRQ, iommu_hpm->supported_events);
+	set_bit(RISCV_IOMMU_HPMEVENT_TLB_MISS, iommu_hpm->supported_events);
+}
+
 static void riscv_iommu_hpm_remove(void *data)
 {
 	struct riscv_iommu_hpm *iommu_hpm = data;
@@ -756,16 +882,22 @@ static int riscv_iommu_hpm_register_unit(struct riscv_iommu_device *iommu,
 					 u32 offset, int irq,
 					 const char *identifier,
 					 const struct attribute_group **attr_groups,
-					 const char *prefix)
+					 int index, int *puid)
 {
 	struct device *dev = iommu->dev;
-	const char *pmu_name;
+	const char *pmu_name, *prefix;
 	u32 val;
 	int err;
 	int unique_id;
 	void __iomem *base;
 
-	unique_id = atomic_fetch_inc(&riscv_iommu_hpm_ids);
+	if (index < 0) {
+		unique_id = atomic_fetch_inc(&riscv_iommu_hpm_ids);
+		*puid = unique_id;
+	} else
+		unique_id = *puid;
+	prefix = riscv_iommu_hpm_get_unit(identifier, index >= 0);
+
 	memset(iommu_hpm, 0, sizeof(*iommu_hpm));
 	iommu_hpm->iommu = iommu;
 	iommu_hpm->identifier = identifier;
@@ -797,9 +929,15 @@ static int riscv_iommu_hpm_register_unit(struct riscv_iommu_device *iommu,
 
 	riscv_iommu_hpm_reset(iommu_hpm);
 
-	riscv_iommu_hpm_set_standard_events(iommu_hpm);
-	pmu_name = devm_kasprintf(dev, GFP_KERNEL, "%s_%02x",
-				  prefix, (u8)unique_id);
+	if (index >= 0) {
+		riscv_iommu_hpm_set_ioatc_events(iommu_hpm);
+		pmu_name = devm_kasprintf(dev, GFP_KERNEL, "%s_%02x%02x",
+					  prefix, (u8)unique_id, (u8)index);
+	} else {
+		riscv_iommu_hpm_set_standard_events(iommu_hpm);
+		pmu_name = devm_kasprintf(dev, GFP_KERNEL, "%s_%02x",
+					  prefix, (u8)unique_id);
+	}
 	if (!pmu_name)
 		return -ENOMEM;
 
@@ -902,7 +1040,9 @@ int riscv_iommu_add_hpm(struct riscv_iommu_device *iommu)
 {
 	struct device *dev = iommu->dev;
 	const char *identifier;
-	int irq, rc;
+	int irq, uid, rc, i;
+	struct riscv_iommu_ioatc_desc ioatcs[MAX_RISCV_IOMMU_IOATC];
+	int nr_ioatcs;
 
 	if (!FIELD_GET(RISCV_IOMMU_CAPABILITIES_HPM, iommu->caps)) {
 		dev_dbg(dev, "HPM: Not supported\n");
@@ -927,9 +1067,33 @@ int riscv_iommu_add_hpm(struct riscv_iommu_device *iommu)
 	rc = riscv_iommu_hpm_register_unit(iommu, &iommu->hpm, 0, irq,
 					   identifier,
 					   riscv_iommu_hpm_attr_grps,
-					   "riscv_iommu_hpm");
+					   -1, &uid);
 	if (rc < 0)
 		goto err_module;
+
+	nr_ioatcs = riscv_iommu_hpm_collect_ioatcs(iommu, ioatcs,
+						   ARRAY_SIZE(ioatcs));
+	for (i = 0; i < nr_ioatcs; i++) {
+		struct riscv_iommu_hpm *extra;
+
+		extra = devm_kzalloc(dev, sizeof(*extra), GFP_KERNEL);
+		if (!extra)
+			continue;
+
+		rc = riscv_iommu_hpm_register_unit(iommu, extra,
+						   ioatcs[i].offset,
+						   ioatcs[i].irq,
+						   identifier,
+						   riscv_iommu_ioatc_attr_grps,
+						   ioatcs[i].index, &uid);
+		if (rc) {
+			dev_warn(dev,
+				 "HPM: Failed to register IOATC%u: %d\n",
+				 ioatcs[i].index, rc);
+			continue;
+		}
+	}
+
 	return 0;
 
 err_module:
