@@ -14,6 +14,7 @@
 #include <linux/iommu.h>
 #include <linux/types.h>
 #include <linux/iopoll.h>
+#include <linux/perf_event.h>
 
 #include "iommu-bits.h"
 
@@ -33,6 +34,29 @@ struct riscv_iommu_queue {
 	u8 qid;					/* queue identifier, same as RISCV_IOMMU_INTR_XX */
 };
 
+struct riscv_iommu_hpm {
+	struct riscv_iommu_device *iommu;
+	struct pmu pmu;
+	void __iomem *base;
+	int irq;
+	int on_cpu;
+	struct hlist_node node;
+	/*
+	 * Layout of events:
+	 * 0       -> HPMCYCLES
+	 * 1...n-1 -> HPMEVENTS
+	 */
+	struct perf_event *events[RISCV_IOMMU_HPMCOUNTER_MAX];
+	DECLARE_BITMAP(supported_events, RISCV_IOMMU_HPMCOUNTER_MAX);
+	/*
+	 * Layout of counters:
+	 * 0...min(MAX,n)-2 -> HPMEVENTS
+	 * MAX-1            -> HPMCYCLES
+	 */
+	DECLARE_BITMAP(used_counters, RISCV_IOMMU_HPMCOUNTER_MAX);
+	unsigned int num_counters;
+};
+
 struct riscv_iommu_device {
 	/* iommu core interface */
 	struct iommu_device iommu;
@@ -42,6 +66,8 @@ struct riscv_iommu_device {
 
 	/* hardware control register space */
 	void __iomem *reg;
+	phys_addr_t reg_phys;
+	resource_size_t reg_size;
 
 	/* supported and enabled hardware capabilities */
 	u64 caps;
@@ -60,11 +86,27 @@ struct riscv_iommu_device {
 	unsigned int ddt_mode;
 	dma_addr_t ddt_phys;
 	u64 *ddt_root;
+
+	struct riscv_iommu_hpm hpm;
 };
 
 int riscv_iommu_init(struct riscv_iommu_device *iommu);
 void riscv_iommu_remove(struct riscv_iommu_device *iommu);
 void riscv_iommu_disable(struct riscv_iommu_device *iommu);
+
+#ifdef CONFIG_RISCV_IOMMU_HPM
+int riscv_iommu_add_hpm(struct riscv_iommu_device *iommu);
+void riscv_iommu_remove_hpm(struct riscv_iommu_device *iommu);
+#else
+static inline int riscv_iommu_add_hpm(struct riscv_iommu_device *iommu)
+{
+	return -ENODEV;
+}
+
+static inline void riscv_iommu_remove_hpm(struct riscv_iommu_device *iommu)
+{
+}
+#endif
 
 #define riscv_iommu_readl(iommu, addr) \
 	readl_relaxed((iommu)->reg + (addr))
