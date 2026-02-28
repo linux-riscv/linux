@@ -74,11 +74,13 @@ struct riscv_iommu_device {
  * @name: auxiliary device name
  * @info: device-specific info, freed in release
  * @base: PMU register base
+ * @identifier: perf PMU identifier for JSON Compat matching
  */
 struct riscv_iommu_subdev_params {
 	const char *name;
 	void *info;
 	void __iomem *base;
+	const char *identifier;
 };
 
 int riscv_iommu_init(struct riscv_iommu_device *iommu);

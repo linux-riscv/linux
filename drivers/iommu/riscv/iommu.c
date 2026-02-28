@@ -1664,6 +1664,7 @@ static int riscv_iommu_subdev_add(struct riscv_iommu_device *iommu,
 	subdev->base = params->base;
 	subdev->iommu = iommu;
 	subdev->info = params->info;
+	subdev->identifier = params->identifier;
 
 	auxdev = &subdev->auxdev;
 	auxdev->name = params->name;
@@ -1701,6 +1702,32 @@ err_free:
 	return ret;
 }
 
+/* Compatible strings that serve as PMU identifier for userspace jevents */
+static const char *const riscv_iommu_hpm_identifiers[] = {
+	"spacemit,t100",
+	"riscv,iommu",
+};
+
+static const char *riscv_iommu_get_hpm_identifier(struct device *dev)
+{
+	struct device_node *np = dev->of_node;
+	int i, ret;
+
+	if (!np)
+		return NULL;
+
+	for (i = 0; i < ARRAY_SIZE(riscv_iommu_hpm_identifiers); i++) {
+		ret = of_property_match_string(np, "compatible",
+					       riscv_iommu_hpm_identifiers[i]);
+		if (ret >= 0)
+			return devm_kstrdup(dev,
+					    riscv_iommu_hpm_identifiers[i],
+					    GFP_KERNEL);
+	}
+
+	return NULL;
+}
+
 static void riscv_iommu_enumerate_hpm(struct riscv_iommu_device *iommu)
 {
 	struct riscv_iommu_hpm_info *hpm_info;
@@ -1728,6 +1755,7 @@ static void riscv_iommu_enumerate_hpm(struct riscv_iommu_device *iommu)
 		.name = "riscv_iommu_hpm",
 		.info = hpm_info,
 		.base = iommu->reg + RISCV_IOMMU_REG_IOCOUNTOVF,
+		.identifier = riscv_iommu_get_hpm_identifier(iommu->dev),
 	};
 
 	if (of_device_is_compatible(iommu->dev->of_node, "spacemit,t100")) {
@@ -1822,6 +1850,7 @@ static void riscv_iommu_enumerate_ioatc(struct riscv_iommu_device *iommu)
 			.name = "spacemit_ioatc_hpm",
 			.info = ioatc_info,
 			.base = base + RISCV_IOMMU_REG_IOCOUNTOVF,
+			.identifier = riscv_iommu_get_hpm_identifier(iommu->dev),
 		};
 
 		ret = riscv_iommu_subdev_add(iommu, &params);

@@ -88,6 +88,7 @@ struct riscv_iommu_hpm {
 	unsigned int irq;
 	unsigned int on_cpu;
 	bool global_filter;
+	const char *identifier;
 	struct hlist_node node;
 	/*
 	 * Layout of events:
@@ -664,8 +665,24 @@ static ssize_t riscv_iommu_hpm_global_filter_show(struct device *dev,
 static struct device_attribute riscv_iommu_hpm_global_filter_attr =
 	__ATTR(global_filter, 0444, riscv_iommu_hpm_global_filter_show, NULL);
 
+static ssize_t riscv_iommu_hpm_identifier_show(struct device *dev,
+					       struct device_attribute *attr,
+					       char *buf)
+{
+	struct riscv_iommu_hpm *hpm = dev_get_drvdata(dev);
+
+	if (!hpm->identifier)
+		return 0;
+
+	return sysfs_emit(buf, "%s\n", hpm->identifier);
+}
+
+static struct device_attribute riscv_iommu_hpm_identifier_attr =
+	__ATTR(identifier, 0444, riscv_iommu_hpm_identifier_show, NULL);
+
 static struct attribute *riscv_iommu_hpm_vendor_attrs[] = {
 	&riscv_iommu_hpm_global_filter_attr.attr,
+	&riscv_iommu_hpm_identifier_attr.attr,
 	NULL
 };
 
@@ -891,6 +908,7 @@ static int riscv_iommu_hpm_probe(struct auxiliary_device *auxdev,
 
 	hpm->subdev = subdev;
 	hpm->base = subdev->base;
+	hpm->identifier = subdev->identifier;
 	hpm->on_cpu = raw_smp_processor_id();
 	hpm->irq = info->irq;
 	hpm->global_filter = info->global_filter;
@@ -914,7 +932,9 @@ static int riscv_iommu_hpm_probe(struct auxiliary_device *auxdev,
 	attr_grps = is_ioatc ? riscv_iommu_hpm_ioatc_attr_grps :
 			       riscv_iommu_hpm_attr_grps;
 
-	hpm_name = devm_kstrdup(dev, dev_name(dev), GFP_KERNEL);
+	/* jevents name: auxdev->name + "_" + auxdev->id */
+	hpm_name = devm_kasprintf(dev, GFP_KERNEL, "%s_%u", auxdev->name,
+				  auxdev->id);
 	if (!hpm_name)
 		return -ENOMEM;
 

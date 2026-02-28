@@ -24,6 +24,7 @@ struct riscv_iommu_device;
  * @base: PMU register base
  * @iommu: parent IOMMU (opaque)
  * @info: subdevice-specific info, freed in release
+ * @identifier: Vendor identifier for userspace jevent
  */
 struct riscv_iommu_subdev {
 	struct list_head link;
@@ -31,6 +32,7 @@ struct riscv_iommu_subdev {
 	void __iomem *base;
 	struct riscv_iommu_device *iommu;
 	void *info;
+	const char *identifier;
 };
 
 /**
