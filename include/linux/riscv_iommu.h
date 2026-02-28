@@ -36,9 +36,11 @@ struct riscv_iommu_subdev {
 /**
  * struct riscv_iommu_hpm_info - HPM info for IOATS (main IOMMU HPM)
  * @irq: interrupt number
+ * @global_filter: true if single global filter
  */
 struct riscv_iommu_hpm_info {
 	unsigned int irq;
+	bool global_filter;
 };
 
 /**

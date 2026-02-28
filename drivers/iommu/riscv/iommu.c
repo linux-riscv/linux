@@ -1717,6 +1717,11 @@ static void riscv_iommu_enumerate_hpm(struct riscv_iommu_device *iommu)
 		.base = iommu->reg + RISCV_IOMMU_REG_IOCOUNTOVF,
 	};
 
+	if (of_device_is_compatible(iommu->dev->of_node, "spacemit,t100")) {
+		hpm_info->global_filter = true;
+		params.name = "spacemit_ioats_hpm";
+	}
+
 	ret = riscv_iommu_subdev_add(iommu, &params);
 	if (ret) {
 		kfree(hpm_info);
