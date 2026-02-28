@@ -16,6 +16,7 @@
 #include <linux/acpi_rimt.h>
 #include <linux/compiler.h>
 #include <linux/crash_dump.h>
+#include <linux/idr.h>
 #include <linux/init.h>
 #include <linux/iommu.h>
 #include <linux/iopoll.h>
@@ -47,10 +48,27 @@
 static DEFINE_IDA(riscv_iommu_pscids);
 #define RISCV_IOMMU_MAX_PSCID		(BIT(20) - 1)
 
+static DEFINE_IDA(riscv_iommu_subdev_ida);
+
 /* Device resource-managed allocations */
 struct riscv_iommu_devres {
 	void *addr;
 };
+
+bool riscv_iommu_pmip_status(struct riscv_iommu_subdev *subdev)
+{
+	u32 ipsr = riscv_iommu_readl(subdev->iommu, RISCV_IOMMU_REG_IPSR);
+
+	return !!(ipsr & RISCV_IOMMU_IPSR_PMIP);
+}
+EXPORT_SYMBOL_GPL(riscv_iommu_pmip_status);
+
+void riscv_iommu_clear_pmip(struct riscv_iommu_subdev *subdev)
+{
+	riscv_iommu_writel(subdev->iommu, RISCV_IOMMU_REG_IPSR,
+			   RISCV_IOMMU_IPSR_PMIP);
+}
+EXPORT_SYMBOL_GPL(riscv_iommu_clear_pmip);
 
 static void riscv_iommu_devres_pages_release(struct device *dev, void *res)
 {
@@ -1602,10 +1620,154 @@ static int riscv_iommu_init_check(struct riscv_iommu_device *iommu)
 	return 0;
 }
 
+static void riscv_iommu_subdev_release(struct device *dev)
+{
+	struct riscv_iommu_subdev *subdev = riscv_iommu_get_subdev(dev);
+
+	ida_free(&riscv_iommu_subdev_ida, subdev->auxdev.id);
+	kfree(subdev->info);
+	kfree(subdev);
+}
+
+static int riscv_iommu_subdev_add(struct riscv_iommu_device *iommu,
+				  const struct riscv_iommu_subdev_params *params)
+{
+	struct riscv_iommu_subdev *subdev;
+	struct auxiliary_device *auxdev;
+	int id, ret;
+
+	if (!params->info)
+		return -EINVAL;
+
+	id = ida_alloc(&riscv_iommu_subdev_ida, GFP_KERNEL);
+	if (id < 0)
+		return id;
+
+	subdev = kzalloc(sizeof(*subdev), GFP_KERNEL);
+	if (!subdev) {
+		ret = -ENOMEM;
+		goto err_free;
+	}
+
+	subdev->base = params->base;
+	subdev->iommu = iommu;
+	subdev->info = params->info;
+
+	auxdev = &subdev->auxdev;
+	auxdev->name = params->name;
+	auxdev->id = id;
+	auxdev->dev.parent = iommu->dev;
+	auxdev->dev.release = riscv_iommu_subdev_release;
+
+	ret = auxiliary_device_init(auxdev);
+	if (ret) {
+		dev_err(iommu->dev, "Failed to init %s auxiliary device: %d\n",
+			params->name, ret);
+		goto err_free;
+	}
+
+	ret = auxiliary_device_add(auxdev);
+	if (ret) {
+		dev_err(iommu->dev, "Failed to add %s auxiliary device: %d\n",
+			params->name, ret);
+		goto err_uninit;
+	}
+
+	spin_lock(&iommu->subdev_lock);
+	list_add_tail(&subdev->link, &iommu->subdev_list);
+	spin_unlock(&iommu->subdev_lock);
+	dev_info(iommu->dev, "%s auxiliary device created\n", params->name);
+	return 0;
+
+err_uninit:
+	auxiliary_device_uninit(auxdev);
+	return ret;
+
+err_free:
+	kfree(subdev);
+	ida_free(&riscv_iommu_subdev_ida, id);
+	return ret;
+}
+
+static void riscv_iommu_enumerate_hpm(struct riscv_iommu_device *iommu)
+{
+	struct riscv_iommu_hpm_info *hpm_info;
+	struct riscv_iommu_subdev_params params;
+	int irq;
+	int ret;
+
+	if (!(iommu->caps & RISCV_IOMMU_CAPABILITIES_HPM))
+		return;
+
+	irq = iommu->irqs[riscv_iommu_queue_vec(iommu, RISCV_IOMMU_INTR_PM)];
+	if (irq <= 0) {
+		dev_err(iommu->dev, "HPM: No IRQ available\n");
+		return;
+	}
+
+	hpm_info = kzalloc(sizeof(*hpm_info), GFP_KERNEL);
+	if (!hpm_info)
+		return;
+
+	hpm_info->irq = irq;
+
+	params = (struct riscv_iommu_subdev_params) {
+		.name = "riscv_iommu_hpm",
+		.info = hpm_info,
+		.base = iommu->reg + RISCV_IOMMU_REG_IOCOUNTOVF,
+	};
+
+	ret = riscv_iommu_subdev_add(iommu, &params);
+	if (ret) {
+		kfree(hpm_info);
+		dev_warn(iommu->dev,
+			 "Failed to enumerate HPM auxiliary device: %d\n",
+			 ret);
+	}
+}
+
+/**
+ * riscv_iommu_subdev_setup - Enumerate auxiliary bus subdevices
+ *
+ * @iommu: RISC-V IOMMU device
+ *
+ * Enumerates HPM, or other extended subdevices via the auxiliary bus. To
+ * add new extended device types, implement an enumerate function and call
+ * it from here.
+ */
+void riscv_iommu_subdev_setup(struct riscv_iommu_device *iommu)
+{
+	riscv_iommu_enumerate_hpm(iommu);
+}
+
+/**
+ * riscv_iommu_subdev_cleanup - Remove all auxiliary bus subdevices
+ *
+ * @iommu: RISC-V IOMMU device
+ *
+ * Iterates over the subdev_list in reverse order, deletes each auxiliary
+ * device from the bus and uninitializes it.
+ */
+void riscv_iommu_subdev_cleanup(struct riscv_iommu_device *iommu)
+{
+	struct riscv_iommu_subdev *subdev, *next;
+
+	spin_lock(&iommu->subdev_lock);
+	list_for_each_entry_safe_reverse(subdev, next, &iommu->subdev_list, link) {
+		list_del_init(&subdev->link);
+		spin_unlock(&iommu->subdev_lock);
+		auxiliary_device_delete(&subdev->auxdev);
+		auxiliary_device_uninit(&subdev->auxdev);
+		spin_lock(&iommu->subdev_lock);
+	}
+	spin_unlock(&iommu->subdev_lock);
+}
+
 void riscv_iommu_remove(struct riscv_iommu_device *iommu)
 {
 	iommu_device_unregister(&iommu->iommu);
 	iommu_device_sysfs_remove(&iommu->iommu);
+	riscv_iommu_subdev_cleanup(iommu);
 	riscv_iommu_iodir_set_mode(iommu, RISCV_IOMMU_DDTP_IOMMU_MODE_OFF);
 	riscv_iommu_queue_disable(&iommu->cmdq);
 	riscv_iommu_queue_disable(&iommu->fltq);
@@ -1615,6 +1777,8 @@ int riscv_iommu_init(struct riscv_iommu_device *iommu)
 {
 	int rc;
 
+	spin_lock_init(&iommu->subdev_lock);
+	INIT_LIST_HEAD(&iommu->subdev_list);
 	RISCV_IOMMU_QUEUE_INIT(&iommu->cmdq, CQ);
 	RISCV_IOMMU_QUEUE_INIT(&iommu->fltq, FQ);
 
@@ -1668,6 +1832,11 @@ int riscv_iommu_init(struct riscv_iommu_device *iommu)
 		dev_err_probe(iommu->dev, rc, "cannot register iommu interface\n");
 		goto err_remove_sysfs;
 	}
+
+	/* Initialize auxiliary devices for extended features. These are not
+	 * critical to IOMMU operation, so failures are non-fatal.
+	 */
+	riscv_iommu_subdev_setup(iommu);
 
 	return 0;
 

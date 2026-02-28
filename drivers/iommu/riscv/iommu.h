@@ -14,6 +14,7 @@
 #include <linux/iommu.h>
 #include <linux/types.h>
 #include <linux/iopoll.h>
+#include <linux/riscv_iommu.h>
 
 #include "iommu-bits.h"
 
@@ -42,6 +43,8 @@ struct riscv_iommu_device {
 
 	/* hardware control register space */
 	void __iomem *reg;
+	phys_addr_t reg_phys;
+	resource_size_t reg_size;
 
 	/* supported and enabled hardware capabilities */
 	u64 caps;
@@ -60,11 +63,29 @@ struct riscv_iommu_device {
 	unsigned int ddt_mode;
 	dma_addr_t ddt_phys;
 	u64 *ddt_root;
+
+	/* auxiliary subdevices */
+	spinlock_t subdev_lock;
+	struct list_head subdev_list;
+};
+
+/**
+ * struct riscv_iommu_subdev_params - params for adding auxiliary subdevice
+ * @name: auxiliary device name
+ * @info: device-specific info, freed in release
+ * @base: PMU register base
+ */
+struct riscv_iommu_subdev_params {
+	const char *name;
+	void *info;
+	void __iomem *base;
 };
 
 int riscv_iommu_init(struct riscv_iommu_device *iommu);
 void riscv_iommu_remove(struct riscv_iommu_device *iommu);
 void riscv_iommu_disable(struct riscv_iommu_device *iommu);
+void riscv_iommu_subdev_setup(struct riscv_iommu_device *iommu);
+void riscv_iommu_subdev_cleanup(struct riscv_iommu_device *iommu);
 
 #define riscv_iommu_readl(iommu, addr) \
 	readl_relaxed((iommu)->reg + (addr))
