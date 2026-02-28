@@ -34,13 +34,17 @@ struct riscv_iommu_subdev {
 };
 
 /**
- * struct riscv_iommu_hpm_info - HPM info for IOATS (main IOMMU HPM)
+ * struct riscv_iommu_hpm_info - HPM info for IOATS and IOATC
  * @irq: interrupt number
  * @global_filter: true if single global filter
+ * @is_ioatc: false for IOATS, true for IOATC
+ * @index: DTISR index for IOATC (0-63), 0 for IOATS
  */
 struct riscv_iommu_hpm_info {
 	unsigned int irq;
 	bool global_filter;
+	bool is_ioatc;
+	u8 index;
 };
 
 /**

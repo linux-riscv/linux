@@ -55,9 +55,21 @@ struct riscv_iommu_devres {
 	void *addr;
 };
 
+static unsigned int riscv_iommu_reg_ipsr(struct riscv_iommu_subdev *subdev)
+{
+	struct riscv_iommu_hpm_info *info = subdev->info;
+	unsigned int offset;
+
+	if (info && info->is_ioatc)
+		offset = RISCV_IOMMU_IOATC_BASE(info->index);
+	else
+		offset = 0;
+	return offset + RISCV_IOMMU_REG_IPSR;
+}
+
 bool riscv_iommu_pmip_status(struct riscv_iommu_subdev *subdev)
 {
-	u32 ipsr = riscv_iommu_readl(subdev->iommu, RISCV_IOMMU_REG_IPSR);
+	u32 ipsr = riscv_iommu_readl(subdev->iommu, riscv_iommu_reg_ipsr(subdev));
 
 	return !!(ipsr & RISCV_IOMMU_IPSR_PMIP);
 }
@@ -65,7 +77,7 @@ EXPORT_SYMBOL_GPL(riscv_iommu_pmip_status);
 
 void riscv_iommu_clear_pmip(struct riscv_iommu_subdev *subdev)
 {
-	riscv_iommu_writel(subdev->iommu, RISCV_IOMMU_REG_IPSR,
+	riscv_iommu_writel(subdev->iommu, riscv_iommu_reg_ipsr(subdev),
 			   RISCV_IOMMU_IPSR_PMIP);
 }
 EXPORT_SYMBOL_GPL(riscv_iommu_clear_pmip);
@@ -1710,6 +1722,7 @@ static void riscv_iommu_enumerate_hpm(struct riscv_iommu_device *iommu)
 		return;
 
 	hpm_info->irq = irq;
+	hpm_info->is_ioatc = false;
 
 	params = (struct riscv_iommu_subdev_params) {
 		.name = "riscv_iommu_hpm",
@@ -1731,6 +1744,95 @@ static void riscv_iommu_enumerate_hpm(struct riscv_iommu_device *iommu)
 	}
 }
 
+struct riscv_iommu_ioatc_desc {
+	int irq;
+	u32 index;
+};
+
+static int riscv_iommu_collect_ioatcs(struct riscv_iommu_device *iommu,
+				      struct riscv_iommu_ioatc_desc *descs,
+				      int max_desc)
+{
+	struct device *dev = iommu->dev;
+	int count, index, i, j;
+	u32 dtisr, state;
+	int nr_ioats_irqs, nr_ioatc_irqs;
+
+	if (!of_device_is_compatible(dev->of_node, "spacemit,t100"))
+		return 0;
+
+	if (iommu->fctl & RISCV_IOMMU_FCTL_WSI)
+		nr_ioats_irqs = 1;
+	else
+		nr_ioats_irqs = RISCV_IOMMU_INTR_COUNT;
+
+	if (iommu->irqs_count > nr_ioats_irqs)
+		nr_ioatc_irqs = iommu->irqs_count - nr_ioats_irqs;
+	else
+		nr_ioatc_irqs = 0;
+
+	count = 0;
+	for (i = 0; i < 4 && count < max_desc; i++) {
+		dtisr = riscv_iommu_readl(iommu, RISCV_IOMMU_REG_DTISR(i));
+		for (j = 0; j < 16 && count < max_desc; j++) {
+			index = i * 16 + j;
+			state = (dtisr & RISCV_IOMMU_DTI_STS_MASK(index)) >>
+				RISCV_IOMMU_DTI_STS_SHIFT(index);
+			if (state != RISCV_IOMMU_DTI_STS_IOATC)
+				continue;
+			descs[count].index = index;
+			if (count < nr_ioatc_irqs && index < MAX_RISCV_IOMMU_IOATC)
+				descs[count].irq = iommu->irqs[count + nr_ioats_irqs];
+			else
+				descs[count].irq = 0;
+			count++;
+		}
+	}
+	return count;
+}
+
+static void riscv_iommu_enumerate_ioatc(struct riscv_iommu_device *iommu)
+{
+	struct riscv_iommu_ioatc_desc ioatcs[MAX_RISCV_IOMMU_IOATC];
+	struct riscv_iommu_hpm_info *ioatc_info;
+	struct riscv_iommu_subdev_params params;
+	void __iomem *base;
+	int nr_ioatcs, i, ret;
+
+	nr_ioatcs = riscv_iommu_collect_ioatcs(iommu, ioatcs, ARRAY_SIZE(ioatcs));
+	if (nr_ioatcs <= 0)
+		return;
+
+	for (i = 0; i < nr_ioatcs; i++) {
+		if (ioatcs[i].irq <= 0)
+			continue;
+
+		ioatc_info = kzalloc(sizeof(*ioatc_info), GFP_KERNEL);
+		if (!ioatc_info)
+			continue;
+
+		ioatc_info->irq = ioatcs[i].irq;
+		ioatc_info->index = ioatcs[i].index;
+		ioatc_info->global_filter = true;
+		ioatc_info->is_ioatc = true;
+
+		base = iommu->reg + RISCV_IOMMU_IOATC_BASE(ioatcs[i].index);
+
+		params = (struct riscv_iommu_subdev_params) {
+			.name = "spacemit_ioatc_hpm",
+			.info = ioatc_info,
+			.base = base + RISCV_IOMMU_REG_IOCOUNTOVF,
+		};
+
+		ret = riscv_iommu_subdev_add(iommu, &params);
+		if (ret) {
+			kfree(ioatc_info);
+			dev_warn(iommu->dev, "Failed to add IOATC%u: %d\n",
+				 ioatcs[i].index, ret);
+		}
+	}
+}
+
 /**
  * riscv_iommu_subdev_setup - Enumerate auxiliary bus subdevices
  *
@@ -1743,6 +1845,7 @@ static void riscv_iommu_enumerate_hpm(struct riscv_iommu_device *iommu)
 void riscv_iommu_subdev_setup(struct riscv_iommu_device *iommu)
 {
 	riscv_iommu_enumerate_hpm(iommu);
+	riscv_iommu_enumerate_ioatc(iommu);
 }
 
 /**

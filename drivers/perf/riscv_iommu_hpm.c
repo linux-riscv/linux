@@ -681,6 +681,31 @@ static const struct attribute_group *riscv_iommu_hpm_attr_grps[] = {
 	NULL
 };
 
+#define IOMMU_IOATC_EVENT_ATTR(_name, _id) \
+	PMU_EVENT_ATTR_ID(_name, riscv_iommu_hpm_event_show, _id)
+
+static struct attribute *riscv_iommu_hpm_ioatc_events[] = {
+	IOMMU_IOATC_EVENT_ATTR(cycles, RISCV_IOMMU_HPMEVENT_CYCLES),
+	IOMMU_IOATC_EVENT_ATTR(untrans_rq, RISCV_IOMMU_HPMEVENT_URQ),
+	IOMMU_IOATC_EVENT_ATTR(trans_rq, RISCV_IOMMU_HPMEVENT_TRQ),
+	IOMMU_IOATC_EVENT_ATTR(tlb_mis, RISCV_IOMMU_HPMEVENT_TLB_MISS),
+	NULL
+};
+
+static const struct attribute_group riscv_iommu_hpm_ioatc_events_group = {
+	.name = "events",
+	.attrs = riscv_iommu_hpm_ioatc_events,
+	.is_visible = riscv_iommu_hpm_event_is_visible,
+};
+
+static const struct attribute_group *riscv_iommu_hpm_ioatc_attr_grps[] = {
+	&riscv_iommu_hpm_cpumask_group,
+	&riscv_iommu_hpm_ioatc_events_group,
+	&riscv_iommu_hpm_format_group,
+	&riscv_iommu_hpm_vendor_group,
+	NULL
+};
+
 static irqreturn_t riscv_iommu_hpm_handle_irq(int irq_num, void *data)
 {
 	struct riscv_iommu_hpm *hpm = data;
@@ -826,6 +851,15 @@ static void riscv_iommu_hpm_set_standard_events(struct riscv_iommu_hpm *hpm)
 	set_bit(RISCV_IOMMU_HPMEVENT_G_WALKS, hpm->supported_events);
 }
 
+static void riscv_iommu_hpm_set_ioatc_events(struct riscv_iommu_hpm *hpm)
+{
+	/* SpacemiT T100 IOATC: subset of events (URQ, TRQ, TLB_MISS) */
+	set_bit(RISCV_IOMMU_HPMEVENT_CYCLES, hpm->supported_events);
+	set_bit(RISCV_IOMMU_HPMEVENT_URQ, hpm->supported_events);
+	set_bit(RISCV_IOMMU_HPMEVENT_TRQ, hpm->supported_events);
+	set_bit(RISCV_IOMMU_HPMEVENT_TLB_MISS, hpm->supported_events);
+}
+
 static int riscv_iommu_hpm_probe(struct auxiliary_device *auxdev,
 				 const struct auxiliary_device_id *id)
 {
@@ -834,6 +868,8 @@ static int riscv_iommu_hpm_probe(struct auxiliary_device *auxdev,
 	struct device *dev = &auxdev->dev;
 	struct riscv_iommu_hpm_info *info;
 	const char *hpm_name;
+	const struct attribute_group **attr_grps;
+	bool is_ioatc;
 	u32 val;
 	int err;
 
@@ -858,6 +894,7 @@ static int riscv_iommu_hpm_probe(struct auxiliary_device *auxdev,
 	hpm->on_cpu = raw_smp_processor_id();
 	hpm->irq = info->irq;
 	hpm->global_filter = info->global_filter;
+	is_ioatc = info->is_ioatc;
 
 	bitmap_zero(hpm->used_counters, RISCV_IOMMU_HPMCOUNTER_MAX);
 	bitmap_zero(hpm->supported_events, RISCV_IOMMU_HPMEVENT_MAX);
@@ -869,7 +906,13 @@ static int riscv_iommu_hpm_probe(struct auxiliary_device *auxdev,
 		return -ENODEV;
 
 	riscv_iommu_hpm_reset(hpm);
-	riscv_iommu_hpm_set_standard_events(hpm);
+	if (is_ioatc)
+		riscv_iommu_hpm_set_ioatc_events(hpm);
+	else
+		riscv_iommu_hpm_set_standard_events(hpm);
+
+	attr_grps = is_ioatc ? riscv_iommu_hpm_ioatc_attr_grps :
+			       riscv_iommu_hpm_attr_grps;
 
 	hpm_name = devm_kstrdup(dev, dev_name(dev), GFP_KERNEL);
 	if (!hpm_name)
@@ -893,7 +936,7 @@ static int riscv_iommu_hpm_probe(struct auxiliary_device *auxdev,
 		.start = riscv_iommu_hpm_event_start,
 		.stop = riscv_iommu_hpm_event_stop,
 		.read = riscv_iommu_hpm_event_update,
-		.attr_groups = riscv_iommu_hpm_attr_grps,
+		.attr_groups = attr_grps,
 		.capabilities = PERF_PMU_CAP_NO_EXCLUDE,
 	};
 
@@ -931,6 +974,7 @@ static void riscv_iommu_hpm_remove(struct auxiliary_device *auxdev)
 static const struct auxiliary_device_id riscv_iommu_hpm_ids[] = {
 	{ .name = "iommu.riscv_iommu_hpm" },
 	{ .name = "iommu.spacemit_ioats_hpm" },
+	{ .name = "iommu.spacemit_ioatc_hpm" },
 	{}
 };
 MODULE_DEVICE_TABLE(auxiliary, riscv_iommu_hpm_ids);
