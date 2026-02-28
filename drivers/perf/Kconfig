@@ -311,4 +311,13 @@ config MARVELL_PEM_PMU
 	  Enable support for PCIe Interface performance monitoring
 	  on Marvell platform.
 
+config RISCV_IOMMU_HPM
+        tristate "RISC-V IOMMU HPM support"
+        depends on RISCV_IOMMU && PERF_EVENTS
+        help
+          Support for the Hardware Performance Monitor (HPM) in RISC-V IOMMU,
+          which provides monitoring of transactions passing through the
+          IOMMU and allows the resulting information to be filtered based
+          on the device/process ID of the corresponding master.
+
 endmenu
