@@ -80,6 +80,7 @@ void sifive_errata_patch_func(struct alt_entry *begin, struct alt_entry *end,
 			      unsigned int stage)
 {
 	struct alt_entry *alt;
+	void *oldptr, *altptr;
 	u32 cpu_req_errata;
 	u32 tmp;
 
@@ -100,9 +101,12 @@ void sifive_errata_patch_func(struct alt_entry *begin, struct alt_entry *end,
 
 		tmp = (1U << alt->patch_id);
 		if (cpu_req_errata & tmp) {
+			oldptr = ALT_OLD_PTR(alt);
+			altptr = ALT_ALT_PTR(alt);
+
 			mutex_lock(&text_mutex);
-			patch_text_nosync(ALT_OLD_PTR(alt), ALT_ALT_PTR(alt),
-					  alt->alt_len);
+			patch_text_nosync(oldptr, altptr, alt->alt_len);
+			riscv_alternative_fix_offsets(oldptr, alt->alt_len, oldptr - altptr);
 			mutex_unlock(&text_mutex);
 		}
 	}
