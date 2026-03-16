@@ -35,6 +35,19 @@
 		:"r" (0u+(val)));				\
 	__ret; })
 
+#define runtime_const_mask_32(val, sym) ({			\
+	unsigned long __ret;					\
+	asm_inline("1:\t"					\
+		"movz %w0, #0xcdef\n\t"				\
+		"movk %w0, #0x89ab, lsl #16\n\t"			\
+		"and %w0,%w0,%w1\n\t"				\
+		".pushsection runtime_mask_" #sym ",\"a\"\n\t"	\
+		".long 1b - .\n\t"				\
+		".popsection"					\
+		:"=r" (__ret)					\
+		:"r" (0u+(val)));				\
+	__ret; })
+
 #define runtime_const_init(type, sym) do {		\
 	extern s32 __start_runtime_##type##_##sym[];	\
 	extern s32 __stop_runtime_##type##_##sym[];	\
@@ -78,6 +91,15 @@ static inline void __runtime_fixup_shift(void *where, unsigned long val)
 	insn |= (val & 63) << 16;
 	*p = cpu_to_le32(insn);
 	__runtime_fixup_caches(where, 1);
+}
+
+/* Immediate value is 6 bits starting at bit #16 */
+static inline void __runtime_fixup_mask(void *where, unsigned long val)
+{
+	__le32 *p = lm_alias(where);
+	__runtime_fixup_16(p, val);
+	__runtime_fixup_16(p+1, val >> 16);
+	__runtime_fixup_caches(where, 2);
 }
 
 static inline void runtime_const_fixup(void (*fn)(void *, unsigned long),
