@@ -61,6 +61,8 @@ static inline u64 hv_get_non_nested_msr(unsigned int reg)
 				ARM_SMCCC_OWNER_VENDOR_HYP,	\
 				HV_SMCCC_FUNC_NUMBER)
 
+struct mshv_vtl_per_cpu;
+
 struct mshv_vtl_cpu_context {
 /*
  * NOTE: x18 is managed by the hypervisor. It won't be reloaded from this array.
@@ -82,6 +84,7 @@ static inline int hv_vtl_get_set_reg(struct hv_register_assoc *regs, bool set, u
 }
 
 void mshv_vtl_return_call(struct mshv_vtl_cpu_context *vtl0);
+bool hv_vtl_configure_reg_page(struct mshv_vtl_per_cpu *per_cpu);
 #endif
 
 #include <asm-generic/mshyperv.h>
