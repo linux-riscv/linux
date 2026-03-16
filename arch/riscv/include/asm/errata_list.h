@@ -53,18 +53,33 @@ asm(ALTERNATIVE(	\
 	: /* no inputs */	\
 	: "memory")
 
+#ifdef CONFIG_64BIT
+#define ALT_PAGE_CUST_BIT(_bit)						\
+asm(ALTERNATIVE("li %0, 0\t\nnop",					\
+		"1: auipc %0, %%pcrel_hi(riscv_xpbmtuc_mask)\t\n"	\
+		      "ld %0, %%pcrel_lo(1b)(%0)", SIFIVE_VENDOR_ID,	\
+			ERRATA_SIFIVE_XPBMTUC,				\
+			CONFIG_ERRATA_SIFIVE_XPBMTUC)			\
+		: "=r"(_bit))
+#endif
+
 /*
  * _val is marked as "will be overwritten", so need to set it to 0
  * in the default case.
  */
 #define ALT_SVPBMT_SHIFT 61
 #define ALT_THEAD_MAE_SHIFT 59
+#define HAS_XPBMTUC_PAGE_NOCACHE	CONFIG_ERRATA_SIFIVE_XPBMTUC
+#define HAS_XPBMTUC_PAGE_MTMASK		CONFIG_ERRATA_SIFIVE_XPBMTUC
 #define ALT_SVPBMT(_val, prot)						\
-asm(ALTERNATIVE_2("li %0, 0\t\nnop",					\
+asm(ALTERNATIVE_3("li %0, 0\t\nnop",					\
 		  "li %0, %1\t\nslli %0,%0,%3", 0,			\
 			RISCV_ISA_EXT_SVPBMT, CONFIG_RISCV_ISA_SVPBMT,	\
 		  "li %0, %2\t\nslli %0,%0,%4", THEAD_VENDOR_ID,	\
-			ERRATA_THEAD_MAE, CONFIG_ERRATA_THEAD_MAE)	\
+			ERRATA_THEAD_MAE, CONFIG_ERRATA_THEAD_MAE,	\
+		  "1: auipc %0, %%pcrel_hi(riscv_xpbmtuc_mask)\t\n"	\
+			"ld %0, %%pcrel_lo(1b)(%0)", SIFIVE_VENDOR_ID,	\
+			ERRATA_SIFIVE_XPBMTUC, HAS_XPBMTUC##prot)	\
 		: "=r"(_val)						\
 		: "I"(prot##_SVPBMT >> ALT_SVPBMT_SHIFT),		\
 		  "I"(prot##_THEAD >> ALT_THEAD_MAE_SHIFT),		\

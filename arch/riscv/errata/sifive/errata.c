@@ -8,11 +8,37 @@
 #include <linux/module.h>
 #include <linux/string.h>
 #include <linux/bug.h>
+#include <linux/of.h>
 #include <asm/text-patching.h>
 #include <asm/alternative.h>
 #include <asm/vendorid_list.h>
 #include <asm/errata_list.h>
 #include <asm/vendor_extensions.h>
+#include <asm/cacheflush.h>
+#include <asm/sbi.h>
+
+#define SIFIVE_SBI_EXT_SIFIVE		0x09000489
+#define SIFIVE_SBI_EXT_XPBMTUC_PRESENT	0x50425543 // PBUC
+
+#ifdef CONFIG_ERRATA_SIFIVE_XPBMTUC
+
+u64 riscv_xpbmtuc_mask;
+EXPORT_SYMBOL(riscv_xpbmtuc_mask);
+
+static const struct {
+	const char *machine;
+	int xpbmtuc_bit;
+} xpbmtuc_platforms[] = {
+	{
+		.machine = "starfive,jh7110",
+		.xpbmtuc_bit = 32
+	},
+	{
+		.machine = "eswin,eic7700",
+		.xpbmtuc_bit = -1 // detect
+	},
+};
+#endif
 
 struct errata_info_t {
 	char name[32];
@@ -51,6 +77,46 @@ static bool errata_cip_1200_check_func(unsigned long  arch_id, unsigned long imp
 	return true;
 }
 
+#ifdef CONFIG_ERRATA_SIFIVE_XPBMTUC
+static void detect_xpbmtuc(void)
+{
+	int riscv_xpbmtuc_bit = -1, i;
+	struct sbiret ret;
+
+	for (i = 0; i < ARRAY_SIZE(xpbmtuc_platforms); i++) {
+		if (!of_machine_is_compatible(xpbmtuc_platforms[i].machine))
+			continue;
+
+		riscv_xpbmtuc_bit = xpbmtuc_platforms[i].xpbmtuc_bit;
+		if (riscv_xpbmtuc_bit >= 0)
+			break;
+
+		ret = sbi_ecall(SIFIVE_SBI_EXT_SIFIVE,
+				SIFIVE_SBI_EXT_XPBMTUC_PRESENT,
+				0, 0, 0, 0, 0, 0);
+		riscv_xpbmtuc_bit = ret.error ? -1 : ret.value;
+		break;
+	}
+	if (riscv_xpbmtuc_bit < 0)
+		return;
+
+	riscv_xpbmtuc_mask = 1UL << riscv_xpbmtuc_bit;
+	pr_info("Using XPbmtUC bit %d\n", riscv_xpbmtuc_bit);
+}
+
+static bool errata_xpbmtuc_check_func(unsigned long arch_id, unsigned long impid)
+{
+	return riscv_xpbmtuc_mask != 0;
+}
+#else
+static void detect_xpbmtuc(void) { }
+
+static bool errata_xpbmtuc_check_func(unsigned long arch_id, unsigned long impid)
+{
+	return false;
+}
+#endif
+
 static struct errata_info_t errata_list[ERRATA_SIFIVE_NUMBER] = {
 	{
 		.name = "cip-453",
@@ -59,6 +125,10 @@ static struct errata_info_t errata_list[ERRATA_SIFIVE_NUMBER] = {
 	{
 		.name = "cip-1200",
 		.check_func = errata_cip_1200_check_func
+	},
+	{
+		.name = "xpbmtuc",
+		.check_func = errata_xpbmtuc_check_func
 	},
 };
 
@@ -88,6 +158,8 @@ void sifive_errata_patch_func(struct alt_entry *begin, struct alt_entry *end,
 
 	if (stage == RISCV_ALTERNATIVES_EARLY_BOOT)
 		return;
+	else if (stage == RISCV_ALTERNATIVES_BOOT)
+		detect_xpbmtuc();
 
 	cpu_req_errata = sifive_errata_probe(archid, impid);
 

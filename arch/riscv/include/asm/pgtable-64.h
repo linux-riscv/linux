@@ -76,7 +76,14 @@ typedef struct {
  * | 63 | 62 61 | 60 54 | 53  10 | 9             8 | 7 | 6 | 5 | 4 | 3 | 2 | 1 | 0
  *   N      MT     RSV    PFN      reserved for SW   D   A   G   U   X   W   R   V
  */
-#define _PAGE_PFN_MASK  GENMASK(53, 10)
+static inline u64 riscv_pfn_mask(void)
+{
+	u64 cust_bit;
+
+	ALT_PAGE_CUST_BIT(cust_bit);
+	return GENMASK(53, 10) ^ cust_bit;
+}
+#define _PAGE_PFN_MASK  riscv_pfn_mask()
 
 /*
  * [63] Svnapot definitions:

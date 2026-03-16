@@ -76,6 +76,19 @@ config ERRATA_SIFIVE_CIP_1200
 
 	  If you don't know what to do here, say "Y".
 
+config ERRATA_SIFIVE_XPBMTUC
+	bool "Support XPbmtUC (customized uncache bit)"
+	depends on ERRATA_SIFIVE && 64BIT && MMU
+	default y
+	select DMA_DIRECT_REMAP
+	help
+	  This will detect and enable the XPbmtUC, where a bit in PTE
+	  is chosen as the UC (uncache) control bit to emulate Svpbmt
+	  on supported SoCs. For SoCs with non-cache-coherent devices,
+	  enabling XPbmtUC allows drivers to map DMA buffers uncached.
+
+	  If you don't know what to do here, say "Y".
+
 config ERRATA_STARFIVE_JH7100
 	bool "StarFive JH7100 support"
 	depends on ARCH_STARFIVE
