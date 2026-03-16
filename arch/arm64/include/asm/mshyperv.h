@@ -83,6 +83,8 @@ static inline int hv_vtl_get_set_reg(struct hv_register_assoc *regs, bool set, u
 	return 1;
 }
 
+static inline void mshv_vtl_return_call_init(u64 vtl_return_offset) {}
+
 void mshv_vtl_return_call(struct mshv_vtl_cpu_context *vtl0);
 bool hv_vtl_configure_reg_page(struct mshv_vtl_per_cpu *per_cpu);
 #endif

@@ -23,8 +23,6 @@
 #include <trace/events/ipi.h>
 #include <uapi/linux/mshv.h>
 #include <hyperv/hvhdk.h>
-
-#include "../../kernel/fpu/legacy.h"
 #include "mshv.h"
 #include "mshv_vtl.h"
 #include "hyperv_vmbus.h"
@@ -206,18 +204,21 @@ static void mshv_vtl_synic_enable_regs(unsigned int cpu)
 static int mshv_vtl_get_vsm_regs(void)
 {
 	struct hv_register_assoc registers[2];
-	int ret, count = 2;
+	int ret, count = 0;
 
-	registers[0].name = HV_REGISTER_VSM_CODE_PAGE_OFFSETS;
-	registers[1].name = HV_REGISTER_VSM_CAPABILITIES;
+	registers[count++].name = HV_REGISTER_VSM_CAPABILITIES;
+	/* Code page offset register is not supported on ARM */
+	if (IS_ENABLED(CONFIG_X86_64))
+		registers[count++].name = HV_REGISTER_VSM_CODE_PAGE_OFFSETS;
 
 	ret = hv_call_get_vp_registers(HV_VP_INDEX_SELF, HV_PARTITION_ID_SELF,
 				       count, input_vtl_zero, registers);
 	if (ret)
 		return ret;
 
-	mshv_vsm_page_offsets.as_uint64 = registers[0].value.reg64;
-	mshv_vsm_capabilities.as_uint64 = registers[1].value.reg64;
+	mshv_vsm_capabilities.as_uint64 = registers[0].value.reg64;
+	if (IS_ENABLED(CONFIG_X86_64))
+		mshv_vsm_page_offsets.as_uint64 = registers[1].value.reg64;
 
 	return ret;
 }
@@ -280,10 +281,13 @@ static int hv_vtl_setup_synic(void)
 
 	/* Use our isr to first filter out packets destined for userspace */
 	hv_setup_vmbus_handler(mshv_vtl_vmbus_isr);
+	/* hv_setup_vmbus_handler() is stubbed for ARM64, add per-cpu VMBus handlers instead */
+	hv_setup_percpu_vmbus_handler(mshv_vtl_vmbus_isr);
 
 	ret = cpuhp_setup_state(CPUHP_AP_ONLINE_DYN, "hyperv/vtl:online",
 				mshv_vtl_alloc_context, NULL);
 	if (ret < 0) {
+		hv_setup_percpu_vmbus_handler(vmbus_isr);
 		hv_setup_vmbus_handler(vmbus_isr);
 		return ret;
 	}
@@ -296,6 +300,7 @@ static int hv_vtl_setup_synic(void)
 static void hv_vtl_remove_synic(void)
 {
 	cpuhp_remove_state(mshv_vtl_cpuhp_online);
+	hv_setup_percpu_vmbus_handler(vmbus_isr);
 	hv_setup_vmbus_handler(vmbus_isr);
 }
 
@@ -1080,10 +1085,12 @@ static vm_fault_t mshv_vtl_low_huge_fault(struct vm_fault *vmf, unsigned int ord
 			ret = vmf_insert_pfn_pmd(vmf, pfn, vmf->flags & FAULT_FLAG_WRITE);
 		return ret;
 
+#if defined(CONFIG_HAVE_ARCH_TRANSPARENT_HUGEPAGE_PUD)
 	case PUD_ORDER:
 		if (can_fault(vmf, PUD_SIZE, &pfn))
 			ret = vmf_insert_pfn_pud(vmf, pfn, vmf->flags & FAULT_FLAG_WRITE);
 		return ret;
+#endif
 
 	default:
 		return VM_FAULT_SIGBUS;
