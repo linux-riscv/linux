@@ -74,7 +74,7 @@ static u32 riscv_instruction_at(void *p)
 	return (u32)parcel[0] | (u32)parcel[1] << 16;
 }
 
-static void riscv_alternative_fix_auipc_jalr(void *ptr, u32 auipc_insn,
+static void riscv_alternative_fix_auipc_pair(void *ptr, u32 auipc_insn,
 					     u32 jalr_insn, int patch_offset)
 {
 	u32 call[2] = { auipc_insn, jalr_insn };
@@ -123,14 +123,15 @@ void riscv_alternative_fix_offsets(void *alt_ptr, unsigned int len,
 		if (riscv_insn_is_auipc(insn) && i < num_insn - 1) {
 			u32 insn2 = riscv_instruction_at(alt_ptr + (i + 1) * sizeof(u32));
 
-			if (!riscv_insn_is_jalr(insn2))
+			if (!riscv_insn_is_jalr(insn2) &&
+			    !riscv_insn_is_load(insn2))
 				continue;
 
-			/* if instruction pair is a call, it will use the ra register */
-			if (RV_EXTRACT_RD_REG(insn) != 1)
+			if (RV_EXTRACT_RD_REG(insn) != RV_EXTRACT_RS1_REG(insn2))
 				continue;
 
-			riscv_alternative_fix_auipc_jalr(alt_ptr + i * sizeof(u32),
+			/* insn2 use rd of insn as rs1, patch it */
+			riscv_alternative_fix_auipc_pair(alt_ptr + i * sizeof(u32),
 							 insn, insn2, patch_offset);
 			i++;
 		}
