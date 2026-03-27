@@ -449,6 +449,8 @@ static inline unsigned get_max_segment_size(const struct queue_limits *lim,
 
 int ll_back_merge_fn(struct request *req, struct bio *bio,
 		unsigned int nr_segs);
+struct request *bpf_attempt_merge(struct request_queue *q, struct request *rq,
+				  struct request *next);
 bool blk_attempt_req_merge(struct request_queue *q, struct request *rq,
 				struct request *next);
 unsigned int blk_recalc_rq_segments(struct request *rq);

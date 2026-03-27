@@ -774,8 +774,8 @@ u8 bio_seg_gap(struct request_queue *q, struct bio *prev, struct bio *next,
  * For non-mq, this has to be called with the request spinlock acquired.
  * For mq with scheduling, the appropriate queue wide lock should be held.
  */
-static struct request *attempt_merge(struct request_queue *q,
-				     struct request *req, struct request *next)
+static struct request *attempt_merge(struct request_queue *q, struct request *req,
+				     struct request *next, bool nohash)
 {
 	if (!rq_mergeable(req) || !rq_mergeable(next))
 		return NULL;
@@ -842,7 +842,7 @@ static struct request *attempt_merge(struct request_queue *q,
 
 	req->__data_len += blk_rq_bytes(next);
 
-	if (!blk_discard_mergable(req))
+	if (!nohash && !blk_discard_mergable(req))
 		elv_merge_requests(q, req, next);
 
 	blk_crypto_rq_put_keyslot(next);
@@ -868,7 +868,7 @@ static struct request *attempt_back_merge(struct request_queue *q,
 	struct request *next = elv_latter_request(q, rq);
 
 	if (next)
-		return attempt_merge(q, rq, next);
+		return attempt_merge(q, rq, next, false);
 
 	return NULL;
 }
@@ -879,9 +879,15 @@ static struct request *attempt_front_merge(struct request_queue *q,
 	struct request *prev = elv_former_request(q, rq);
 
 	if (prev)
-		return attempt_merge(q, prev, rq);
+		return attempt_merge(q, prev, rq, false);
 
 	return NULL;
+}
+
+struct request *bpf_attempt_merge(struct request_queue *q, struct request *rq,
+				  struct request *next)
+{
+	return attempt_merge(q, rq, next, true);
 }
 
 /*
@@ -892,7 +898,7 @@ static struct request *attempt_front_merge(struct request_queue *q,
 bool blk_attempt_req_merge(struct request_queue *q, struct request *rq,
 			   struct request *next)
 {
-	return attempt_merge(q, rq, next);
+	return attempt_merge(q, rq, next, false);
 }
 
 bool blk_rq_merge_ok(struct request *rq, struct bio *bio)
@@ -1169,3 +1175,34 @@ bool blk_mq_sched_try_merge(struct request_queue *q, struct bio *bio,
 	}
 }
 EXPORT_SYMBOL_GPL(blk_mq_sched_try_merge);
+
+bool blk_mq_sched_merge_fn(struct request_queue *q, struct bio *bio,
+		unsigned int nr_segs, struct request **merged_request,
+		struct request *rq, enum elv_merge type, void (*fn)
+		(struct request_queue *, struct request *, enum elv_merge))
+{
+	switch (type) {
+	case ELEVATOR_BACK_MERGE:
+		if (!blk_mq_sched_allow_merge(q, rq, bio))
+			return false;
+		if (bio_attempt_back_merge(rq, bio, nr_segs) != BIO_MERGE_OK)
+			return false;
+		*merged_request = attempt_back_merge(q, rq);
+		if (!*merged_request)
+			fn(q, rq, ELEVATOR_BACK_MERGE);
+		return true;
+	case ELEVATOR_FRONT_MERGE:
+		if (!blk_mq_sched_allow_merge(q, rq, bio))
+			return false;
+		if (bio_attempt_front_merge(rq, bio, nr_segs) != BIO_MERGE_OK)
+			return false;
+		*merged_request = attempt_front_merge(q, rq);
+		if (!*merged_request)
+			fn(q, rq, ELEVATOR_FRONT_MERGE);
+		return true;
+	case ELEVATOR_DISCARD_MERGE:
+		return bio_attempt_discard_merge(q, rq, bio) == BIO_MERGE_OK;
+	default:
+		return false;
+	}
+}

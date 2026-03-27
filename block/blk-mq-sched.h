@@ -7,6 +7,10 @@
 
 #define MAX_SCHED_RQ (16 * BLKDEV_DEFAULT_RQ)
 
+bool blk_mq_sched_merge_fn(struct request_queue *q, struct bio *bio,
+		unsigned int nr_segs, struct request **merged_request,
+		struct request *rq, enum elv_merge type, void (*fn)
+		(struct request_queue *, struct request *, enum elv_merge));
 bool blk_mq_sched_try_merge(struct request_queue *q, struct bio *bio,
 		unsigned int nr_segs, struct request **merged_request);
 bool blk_mq_sched_bio_merge(struct request_queue *q, struct bio *bio,
