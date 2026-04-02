@@ -219,8 +219,9 @@ config EFI_DISABLE_PCI_DMA
 config EFI_EARLYCON
 	def_bool y
 	depends on SERIAL_EARLYCON && !ARM
-	select FONT_SUPPORT
+	depends on SYSFB
 	select ARCH_USE_MEMREMAP_PROT
+	select FONT_SUPPORT
 
 config EFI_CUSTOM_SSDT_OVERLAYS
 	bool "Load custom ACPI SSDT overlay from an EFI variable"
