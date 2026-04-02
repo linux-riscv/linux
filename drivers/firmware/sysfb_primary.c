@@ -32,6 +32,7 @@
 #include <linux/pci.h>
 #include <linux/platform_data/simplefb.h>
 #include <linux/platform_device.h>
+#include <linux/printk.h>
 #include <linux/screen_info.h>
 #include <linux/sysfb.h>
 
@@ -127,11 +128,15 @@ static __init int sysfb_init(void)
 	struct simplefb_platform_data mode;
 	const char *name;
 	bool compatible;
-	int ret = 0;
+	int ret;
 
-	screen_info_apply_fixups();
+	ret = sysfb_apply_screen_info_fixups();
 
 	mutex_lock(&disable_lock);
+	if (ret) {
+		pr_warn("Invalid relocation, disabling system framebuffer\n");
+		disabled = true; /* screen_info relocation failed */
+	}
 	if (disabled)
 		goto unlock_mutex;
 
