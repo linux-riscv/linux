@@ -179,14 +179,28 @@ config MTK_ADSP_IPC
 	  Client might use shared memory to exchange information with ADSP.
 
 config SYSFB
-	bool
+	bool "Enable system framebuffer provided by boot loader"
 	select BOOT_VESA_SUPPORT
 	select SCREEN_INFO
+	help
+	  Use the system framebuffer provided by the boot loader. This will
+	  create a device representing the framebuffer. The output depends on
+	  EFI, VESA, VGA, or some other firmware-based interface.
+
+	  The firmware or boot loader sets the display resolution and color
+	  mode. See your boot loader's documentation on how to do this. On
+	  some systems the display can also be configured during boot with
+	  the kernel's video= or vga= parameters.
+
+	  Besides this option, you also have to enable a compatible graphics
+	  driver, such as efidrm or vesadrm.
+
+	  If unsure, say Y.
 
 config SYSFB_SIMPLEFB
 	bool "Mark VGA/VBE/EFI FB as generic system framebuffer"
+	depends on SYSFB
 	depends on X86 || EFI
-	select SYSFB
 	help
 	  Firmwares often provide initial graphics framebuffers so the BIOS,
 	  bootloader or kernel can show basic video-output during boot for

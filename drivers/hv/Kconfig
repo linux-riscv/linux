@@ -60,8 +60,8 @@ config HYPERV_BALLOON
 config HYPERV_VMBUS
 	tristate "Microsoft Hyper-V VMBus driver"
 	depends on HYPERV
+	depends on SYSFB if EFI && !HYPERV_VTL_MODE
 	default HYPERV
-	select SYSFB if EFI && !HYPERV_VTL_MODE
 	help
 	  Select this option to enable Hyper-V Vmbus driver.
 
