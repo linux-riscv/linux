@@ -225,6 +225,26 @@ config SYSFB_SIMPLEFB
 
 	  If unsure, say Y.
 
+config FIRMWARE_EDID
+	bool "Enable firmware EDID"
+	depends on SYSFB
+	depends on EFI_GENERIC_STUB || X86
+	help
+	  This enables access to the EDID transferred from the firmware.
+	  On EFI systems, the EDID comes from the same device as the
+	  primary GOP. On x86 with BIOS, it comes from the VESA BIOS.
+	  DRM display drivers will be able to export the information
+	  to userspace.
+
+	  Also enable this if DDC/I2C transfers do not work for your driver
+	  and if you are using nvidiafb, i810fb or savagefb.
+
+	  In general, choosing Y for this option is safe.  If you
+	  experience extremely long delays while booting before you get
+	  something on your display, try setting this to N.  Matrox cards in
+	  combination with certain motherboards and monitors are known to
+	  suffer from this problem.
+
 config TH1520_AON_PROTOCOL
 	tristate "Always-On firmware protocol"
 	depends on ARCH_THEAD || COMPILE_TEST
