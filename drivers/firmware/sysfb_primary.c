@@ -35,6 +35,8 @@
 #include <linux/screen_info.h>
 #include <linux/sysfb.h>
 
+#include "sysfb.h"
+
 static struct platform_device *pd;
 static DEFINE_MUTEX(disable_lock);
 static bool disabled;
@@ -97,29 +99,6 @@ bool sysfb_handles_screen_info(void)
 	return !!screen_info_video_type(si);
 }
 EXPORT_SYMBOL_GPL(sysfb_handles_screen_info);
-
-#if defined(CONFIG_PCI)
-static bool sysfb_pci_dev_is_enabled(struct pci_dev *pdev)
-{
-	/*
-	 * TODO: Try to integrate this code into the PCI subsystem
-	 */
-	int ret;
-	u16 command;
-
-	ret = pci_read_config_word(pdev, PCI_COMMAND, &command);
-	if (ret != PCIBIOS_SUCCESSFUL)
-		return false;
-	if (!(command & PCI_COMMAND_MEMORY))
-		return false;
-	return true;
-}
-#else
-static bool sysfb_pci_dev_is_enabled(struct pci_dev *pdev)
-{
-	return false;
-}
-#endif
 
 static struct device *sysfb_parent_dev(const struct screen_info *si)
 {
