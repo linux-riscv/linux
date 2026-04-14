@@ -9,6 +9,7 @@
 #include <asm/local.h>
 #include <linux/spinlock.h>
 #include "coresight-priv.h"
+#include "rvtrace-timestamp.h"
 
 /* Trace Encoder Control Register */
 #define RVTRACE_ENCODER_ITRACE				    BIT(2)
@@ -126,7 +127,10 @@ struct encoder_config {
  * @spinlock:	    Only one at a time pls.
  * @sticky_enable:  True if trace encoder base configuration has been done.
  * @boot_enable:    True if we should start tracing at boot time.
+ * @has_timestamp:  True if this encoder has timestamp component.
+ * @ts_ctrl:        Controls the insertion of global timestamps in the trace streams.
  * @config:	    Structure holding configuration parameters.
+ * @ts_config:	    Timestamp configuration.
  */
 
 struct encoder_data {
@@ -134,10 +138,14 @@ struct encoder_data {
 	spinlock_t			spinlock;
 	bool				sticky_enable;
 	bool				boot_enable;
+	bool				has_timestamp;
+	bool				ts_ctrl;
 	struct encoder_config		config;
+	struct timestamp_config		ts_config;
 };
 
 extern const struct attribute_group *trace_encoder_groups[];
+extern const struct attribute *timestamp_attrs[];
 void encoder_set_default(struct rvtrace_component *comp);
 
 #endif

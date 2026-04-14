@@ -19,6 +19,9 @@
  * @spinlock:     Only one at a time pls.
  * @was_enabled:  Flag showing whether the Trace Funnel was enabled.
  * @input_refcnt: Record the number of funnel inputs
+ * @has_timestamp: True if this funnel has timestamp component.
+ * @ts_ctrl:      Controls the insertion of global timestamps in the trace streams.
+ * @ts_config:    Timestamp configuration.
  */
 struct funnel_data {
 	struct coresight_device	*csdev;
@@ -26,6 +29,11 @@ struct funnel_data {
 	bool			was_enabled;
 	u32			input_refcnt;
 	u32			disintput;
+	bool			has_timestamp;
+	bool			ts_ctrl;
+	struct timestamp_config	ts_config;
 };
+
+extern const struct attribute *timestamp_attrs[];
 
 #endif
