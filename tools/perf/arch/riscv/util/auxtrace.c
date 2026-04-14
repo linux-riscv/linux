@@ -10,6 +10,7 @@
 #include <linux/zalloc.h>
 #include <linux/string.h>
 #include <time.h>
+#include <errno.h>
 
 #include <internal/lib.h> // page_size
 #include "../../../util/auxtrace.h"
