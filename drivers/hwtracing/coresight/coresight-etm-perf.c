@@ -13,7 +13,6 @@
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/perf_event.h>
-#include <linux/perf/arm_pmu.h>
 #include <linux/percpu-defs.h>
 #include <linux/slab.h>
 #include <linux/stringhash.h>
