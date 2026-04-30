@@ -15,11 +15,12 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
-#include <linux/phy/phy.h>
 #include <linux/phy/phy-mipi-dphy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
+
+#include "../phy-provider.h"
 
 #define STF_DPHY_APBIFSAIF_SYSCFG(x)			(x)
 

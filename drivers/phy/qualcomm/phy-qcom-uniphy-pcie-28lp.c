@@ -12,11 +12,12 @@
 #include <linux/module.h>
 #include <linux/of_device.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
 #include <linux/units.h>
+
+#include "../phy-provider.h"
 
 #define RST_ASSERT_DELAY_MIN_US		100
 #define RST_ASSERT_DELAY_MAX_US		150

@@ -20,6 +20,8 @@
 #include <linux/phy/phy.h>
 #include <linux/slab.h>
 
+#include "../phy-provider.h"
+
 #define UPDATE(x, h, l)		(((x) << (l)) & GENMASK((h), (l)))
 
 /* REG: 0x00 */

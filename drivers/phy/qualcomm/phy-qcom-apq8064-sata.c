@@ -13,7 +13,8 @@
 #include <linux/clk.h>
 #include <linux/slab.h>
 #include <linux/platform_device.h>
-#include <linux/phy/phy.h>
+
+#include "../phy-provider.h"
 
 /* PHY registers */
 #define UNIPHY_PLL_REFCLK_CFG		0x000

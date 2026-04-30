@@ -15,11 +15,12 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/spinlock.h>
 #include <linux/mfd/syscon.h>
+
+#include "../phy-provider.h"
 
 #define SATAPHY_CONTROL_OFFSET		0x0724
 #define EXYNOS5_SATAPHY_PMU_ENABLE	BIT(0)

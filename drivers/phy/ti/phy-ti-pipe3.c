@@ -10,7 +10,6 @@
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/slab.h>
-#include <linux/phy/phy.h>
 #include <linux/of.h>
 #include <linux/clk.h>
 #include <linux/err.h>
@@ -21,6 +20,8 @@
 #include <linux/of_platform.h>
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
+
+#include "../phy-provider.h"
 
 #define	PLL_STATUS		0x00000004
 #define	PLL_GO			0x00000008

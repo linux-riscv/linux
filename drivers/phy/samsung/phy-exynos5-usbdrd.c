@@ -26,6 +26,8 @@
 #include <linux/usb/typec.h>
 #include <linux/usb/typec_mux.h>
 
+#include "../phy-provider.h"
+
 /* Exynos USB PHY registers */
 #define EXYNOS5_FSEL_9MHZ6		0x0
 #define EXYNOS5_FSEL_10MHZ		0x1

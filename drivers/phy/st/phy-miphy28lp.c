@@ -7,6 +7,7 @@
  * Author: Alexandre Torgue <alexandre.torgue@st.com>
  */
 
+#include <dt-bindings/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/iopoll.h>
@@ -16,13 +17,12 @@
 #include <linux/of_platform.h>
 #include <linux/of_address.h>
 #include <linux/clk.h>
-#include <linux/phy/phy.h>
 #include <linux/delay.h>
 #include <linux/mfd/syscon.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
 
-#include <dt-bindings/phy/phy.h>
+#include "../phy-provider.h"
 
 /* MiPHY registers */
 #define MIPHY_CONF_RESET		0x00

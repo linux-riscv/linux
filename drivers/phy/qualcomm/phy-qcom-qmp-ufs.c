@@ -13,13 +13,14 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
 
 #include <ufs/unipro.h>
+
+#include "../phy-provider.h"
 
 #include "phy-qcom-qmp-common.h"
 

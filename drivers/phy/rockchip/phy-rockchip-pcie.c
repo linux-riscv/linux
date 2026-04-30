@@ -13,12 +13,12 @@
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
 
+#include "../phy-provider.h"
 
 #define PHY_MAX_LANE_NUM      4
 #define PHY_CFG_DATA_MASK     GENMASK(10, 7)

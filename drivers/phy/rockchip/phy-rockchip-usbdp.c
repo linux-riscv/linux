@@ -25,6 +25,8 @@
 #include <linux/usb/typec_dp.h>
 #include <linux/usb/typec_mux.h>
 
+#include "../phy-provider.h"
+
 /* USBDP PHY Register Definitions */
 #define UDPHY_PCS				0x4000
 #define UDPHY_PMA				0x8000

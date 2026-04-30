@@ -14,9 +14,10 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
+
+#include "../phy-provider.h"
 
 struct ipq4019_usb_phy {
 	struct device		*dev;

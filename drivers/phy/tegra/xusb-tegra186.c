@@ -7,7 +7,6 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/regulator/consumer.h>
 #include <linux/platform_device.h>
 #include <linux/clk.h>
@@ -15,6 +14,7 @@
 
 #include <soc/tegra/fuse.h>
 
+#include "../phy-provider.h"
 #include "xusb.h"
 
 /* FUSE USB_CALIB registers */

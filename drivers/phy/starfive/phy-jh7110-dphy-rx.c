@@ -13,10 +13,11 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
+
+#include "../phy-provider.h"
 
 #define STF_DPHY_APBCFGSAIF_SYSCFG(x)		(x)
 

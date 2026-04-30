@@ -16,8 +16,9 @@
 #include <linux/regmap.h>
 #include <linux/sys_soc.h>
 #include <linux/mfd/syscon.h>
-#include <linux/phy/phy.h>
 #include <linux/usb.h>
+
+#include "../phy-provider.h"
 
 /* GUSB2PHYACCn register */
 #define PHY_NEW_REG_REQ BIT(25)

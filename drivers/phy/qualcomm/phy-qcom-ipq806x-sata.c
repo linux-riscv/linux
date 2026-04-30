@@ -13,7 +13,8 @@
 #include <linux/clk.h>
 #include <linux/slab.h>
 #include <linux/platform_device.h>
-#include <linux/phy/phy.h>
+
+#include "../phy-provider.h"
 
 struct qcom_ipq806x_sata_phy {
 	void __iomem *mmio;

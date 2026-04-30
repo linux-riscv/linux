@@ -16,7 +16,6 @@
 #include <linux/of_platform.h>
 #include <linux/phy/omap_control_phy.h>
 #include <linux/phy/omap_usb.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/property.h>
@@ -24,6 +23,8 @@
 #include <linux/slab.h>
 #include <linux/sys_soc.h>
 #include <linux/usb/phy_companion.h>
+
+#include "../phy-provider.h"
 
 #define USB2PHY_ANA_CONFIG1		0x4c
 #define USB2PHY_DISCON_BYP_LATCH	BIT(31)

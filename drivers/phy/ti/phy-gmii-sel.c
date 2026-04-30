@@ -14,8 +14,9 @@
 #include <linux/of_address.h>
 #include <linux/of_net.h>
 #include <linux/phy.h>
-#include <linux/phy/phy.h>
 #include <linux/regmap.h>
+
+#include "../phy-provider.h"
 
 /* AM33xx SoC specific definitions for the CONTROL port */
 #define AM33XX_GMII_SEL_MODE_MII	0

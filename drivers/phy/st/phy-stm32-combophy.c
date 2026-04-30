@@ -10,11 +10,12 @@
 #include <linux/clk.h>
 #include <linux/mfd/syscon.h>
 #include <linux/platform_device.h>
-#include <linux/phy/phy.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
 #include <dt-bindings/phy/phy.h>
+
+#include "../phy-provider.h"
 
 #define SYSCFG_COMBOPHY_CR1 0x4c00
 #define SYSCFG_COMBOPHY_CR2 0x4c04
