@@ -10,8 +10,9 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of_address.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
+
+#include "../phy-provider.h"
 
 /* phy regs */
 #define UTMI_REVISION		0x0

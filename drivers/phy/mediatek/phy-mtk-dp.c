@@ -10,9 +10,10 @@
 #include <linux/io.h>
 #include <linux/mfd/syscon.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+
+#include "../phy-provider.h"
 
 #define PHY_OFFSET			0x1000
 

@@ -14,9 +14,10 @@
 #include <linux/property.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/usb/of.h>
+
+#include "../phy-provider.h"
 
 #define REG_CONFIG					0x00
 	#define REG_CONFIG_CLK_EN			BIT(0)

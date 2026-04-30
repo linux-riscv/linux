@@ -11,10 +11,11 @@
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/property.h>
 #include <linux/regmap.h>
+
+#include "../phy-provider.h"
 
 /*
  * Unfortunately there is no detailed documentation available for the

@@ -6,12 +6,13 @@
  *
  */
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/module.h>
 #include <linux/gpio.h>
 #include <linux/gpio/consumer.h>
 #include <linux/mux/consumer.h>
+
+#include "phy-provider.h"
 
 struct can_transceiver_data {
 	u32 flags;

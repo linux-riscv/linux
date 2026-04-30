@@ -11,9 +11,10 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+
+#include "../phy-provider.h"
 
 /* eMMC phy register definitions */
 #define EMMC_PHYCTRL0_REG	0xa8

@@ -16,8 +16,9 @@
 #include <linux/io.h>
 #include <linux/kernel.h>
 #include <linux/of_address.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
+
+#include "../phy-provider.h"
 
 #define USB2_PHY_CONFIG_DISABLE BIT(0)
 

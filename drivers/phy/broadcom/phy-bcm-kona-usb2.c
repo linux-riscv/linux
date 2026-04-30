@@ -12,8 +12,10 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
+#include <linux/phy/phy.h> /* for phy_set_bus_width() */
 #include <linux/platform_device.h>
+
+#include "../phy-provider.h"
 
 #define OTGCTL			(0)
 #define OTGCTL_OTGSTAT2		BIT(31)

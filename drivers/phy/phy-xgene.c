@@ -43,8 +43,9 @@
 #include <linux/platform_device.h>
 #include <linux/io.h>
 #include <linux/delay.h>
-#include <linux/phy/phy.h>
 #include <linux/clk.h>
+
+#include "phy-provider.h"
 
 /* Max 2 lanes per a PHY unit */
 #define MAX_LANE			2

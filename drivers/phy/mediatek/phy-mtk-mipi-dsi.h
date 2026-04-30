@@ -13,8 +13,9 @@
 #include <linux/module.h>
 #include <linux/nvmem-consumer.h>
 #include <linux/platform_device.h>
-#include <linux/phy/phy.h>
 #include <linux/slab.h>
+
+#include "../phy-provider.h"
 
 struct mtk_mipitx_data {
 	const u32 mppll_preserve;

@@ -8,9 +8,10 @@
 #include <linux/io.h>
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/soc/mmp/cputype.h>
+
+#include "../phy-provider.h"
 
 #define USB2_PLL_REG0		0x4
 #define USB2_PLL_REG1		0x8

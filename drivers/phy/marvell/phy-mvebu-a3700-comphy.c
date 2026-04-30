@@ -21,9 +21,10 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/phy.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
+
+#include "../phy-provider.h"
 
 #define PLL_SET_DELAY_US		600
 #define COMPHY_PLL_SLEEP		1000

@@ -23,7 +23,6 @@
 #include <linux/module.h>
 #include <linux/mutex.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/phy/phy-sun4i-usb.h>
 #include <linux/platform_device.h>
 #include <linux/power_supply.h>
@@ -32,6 +31,8 @@
 #include <linux/spinlock.h>
 #include <linux/usb/of.h>
 #include <linux/workqueue.h>
+
+#include "../phy-provider.h"
 
 #define REG_ISCR			0x00
 #define REG_PHYCTL_A10			0x04
