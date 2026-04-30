@@ -508,9 +508,10 @@ static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 	if (ret)
 		return ret;
 
-	if (phy->power_count)
+	if (host->phy_powered_on) {
 		phy_power_off(phy);
-
+		host->phy_powered_on = false;
+	}
 
 	/* phy initialization - calibrate the phy */
 	ret = phy_init(phy);
@@ -531,6 +532,7 @@ static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 			__func__, ret);
 		goto out_disable_phy;
 	}
+	host->phy_powered_on = true;
 
 	ret = phy_calibrate(phy);
 	if (ret) {
@@ -1447,11 +1449,8 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 				ufs_qcom_dev_ref_clk_ctrl(host, false);
 			}
 
-			err = phy_power_off(phy);
-			if (err) {
-				dev_err(hba->dev, "phy power off failed, ret=%d\n", err);
-				return err;
-			}
+			phy_power_off(phy);
+			host->phy_powered_on = false;
 		}
 		break;
 	case POST_CHANGE:
@@ -1461,6 +1460,7 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 				dev_err(hba->dev, "phy power on failed, ret = %d\n", err);
 				return err;
 			}
+			host->phy_powered_on = true;
 
 			/* enable the device ref clock for HS mode*/
 			if (ufshcd_is_hs_mode(&hba->pwr_info))
@@ -1651,6 +1651,7 @@ static void ufs_qcom_exit(struct ufs_hba *hba)
 
 	ufs_qcom_disable_lane_clks(host);
 	phy_power_off(host->generic_phy);
+	host->phy_powered_on = false;
 	phy_exit(host->generic_phy);
 }
 
