@@ -9,11 +9,12 @@
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/units.h>
+
+#include "../phy-provider.h"
 
 #define REG_SET		0x4
 #define REG_CLR		0x8

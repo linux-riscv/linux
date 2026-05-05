@@ -12,8 +12,9 @@
 #include <linux/module.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
+
+#include "../phy-provider.h"
 
 /* bits [31:27] are read-only */
 #define U2P_R0							0x0

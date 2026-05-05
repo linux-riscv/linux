@@ -12,9 +12,10 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
+
+#include "../phy-provider.h"
 
 /* OTGPHY register offsets */
 #define REG_USBPCR_OFFSET			0x00

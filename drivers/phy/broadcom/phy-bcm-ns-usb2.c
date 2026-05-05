@@ -13,10 +13,11 @@
 #include <linux/module.h>
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
+
+#include "../phy-provider.h"
 
 struct bcm_ns_usb2 {
 	struct device *dev;

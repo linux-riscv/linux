@@ -16,10 +16,11 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <dt-bindings/firmware/imx/rsrc.h>
+
+#include "../phy-provider.h"
 
 /* Control and Status Registers(CSR) */
 #define PHY_CTRL			0x00

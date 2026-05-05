@@ -10,9 +10,10 @@
 #include <linux/clk.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/io.h>
 #include <linux/platform_device.h>
+
+#include "../phy-provider.h"
 
 #define HOST_VSA_ADDR		0x0
 #define HOST_VSA_DATA		0x4

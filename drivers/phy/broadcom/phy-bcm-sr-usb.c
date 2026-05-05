@@ -8,8 +8,9 @@
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
+
+#include "../phy-provider.h"
 
 enum bcm_usb_phy_version {
 	BCM_SR_USB_COMBO_PHY,

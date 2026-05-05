@@ -9,9 +9,10 @@
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
+
+#include "../phy-provider.h"
 
 #define MAX_A38X_COMPHY	6
 #define MAX_A38X_PORTS	3

@@ -8,10 +8,11 @@
 #include <linux/kernel.h>
 #include <linux/init.h>
 #include <linux/clk.h>
-#include <linux/phy/phy.h>
 #include <linux/io.h>
 #include <linux/mod_devicetable.h>
 #include <linux/platform_device.h>
+
+#include "../phy-provider.h"
 
 struct priv {
 	struct clk	*clk;

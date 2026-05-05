@@ -14,11 +14,12 @@
 #include <linux/mfd/syscon.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
 #include <dt-bindings/phy/phy.h>
+
+#include "../phy-provider.h"
 
 #define COMBPHY_MODE_PCIE		0
 #define COMBPHY_MODE_USB3		1

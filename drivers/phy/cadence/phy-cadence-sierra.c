@@ -12,7 +12,6 @@
 #include <linux/err.h>
 #include <linux/io.h>
 #include <linux/module.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
@@ -22,6 +21,8 @@
 #include <linux/of_platform.h>
 #include <dt-bindings/phy/phy.h>
 #include <dt-bindings/phy/phy-cadence.h>
+
+#include "../phy-provider.h"
 
 #define NUM_SSC_MODE		3
 #define NUM_PHY_TYPE		5

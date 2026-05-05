@@ -7,9 +7,10 @@
 #include <linux/i2c.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/regmap.h>
 #include <linux/regulator/consumer.h>
+
+#include "phy-provider.h"
 
 #define NUM_SUPPLIES 2
 

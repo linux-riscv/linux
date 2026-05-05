@@ -14,11 +14,12 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_address.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/slab.h>
 #include <linux/workqueue.h>
+
+#include "../phy-provider.h"
 
 #define ICFG_DRD_AFE		0x0
 #define ICFG_MISC_STAT		0x18
