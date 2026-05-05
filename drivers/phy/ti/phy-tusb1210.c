@@ -12,11 +12,12 @@
 #include <linux/ulpi/driver.h>
 #include <linux/ulpi/regs.h>
 #include <linux/gpio/consumer.h>
-#include <linux/phy/ulpi_phy.h>
 #include <linux/pm_runtime.h>
 #include <linux/power_supply.h>
 #include <linux/property.h>
 #include <linux/workqueue.h>
+
+#include "../ulpi_phy.h"
 
 #define TI_VENDOR_ID		0x0451
 #define TI_DEVICE_TUSB1210	0x1507
