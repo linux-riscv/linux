@@ -485,6 +485,42 @@ static u32 ufs_qcom_get_hs_gear(struct ufs_hba *hba)
 	return UFS_HS_G3;
 }
 
+static int ufs_qcom_phy_power_on(struct ufs_qcom_host *host)
+{
+	int ret;
+
+	if (host->phy_powered_on)
+		return 0;
+
+	ret = phy_power_on(host->generic_phy);
+	if (ret) {
+		dev_err(host->hba->dev, "Failed to power on PHY: %pe\n",
+			ERR_PTR(ret));
+		return ret;
+	}
+
+	host->phy_powered_on = true;
+
+	return 0;
+}
+
+static void ufs_qcom_phy_power_off(struct ufs_qcom_host *host)
+{
+	int ret;
+
+	if (!host->phy_powered_on)
+		return;
+
+	ret = phy_power_off(host->generic_phy);
+	if (ret) {
+		dev_warn(host->hba->dev, "Failed to power off PHY: %pe\n",
+			 ERR_PTR(ret));
+		return;
+	}
+
+	host->phy_powered_on = false;
+}
+
 static int ufs_qcom_phy_change_mode(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
@@ -1390,7 +1426,6 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 				 enum ufs_notify_change_status status)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	struct phy *phy;
 	int err;
 
 	/*
@@ -1400,8 +1435,6 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 	 */
 	if (!host)
 		return 0;
-
-	phy = host->generic_phy;
 
 	switch (status) {
 	case PRE_CHANGE:
@@ -1420,20 +1453,14 @@ static int ufs_qcom_setup_clocks(struct ufs_hba *hba, bool on,
 				ufs_qcom_dev_ref_clk_ctrl(host, false);
 			}
 
-			err = phy_power_off(phy);
-			if (err) {
-				dev_err(hba->dev, "phy power off failed, ret=%d\n", err);
-				return err;
-			}
+			ufs_qcom_phy_power_off(host);
 		}
 		break;
 	case POST_CHANGE:
 		if (on) {
-			err = phy_power_on(phy);
-			if (err) {
-				dev_err(hba->dev, "phy power on failed, ret = %d\n", err);
+			err = ufs_qcom_phy_power_on(host);
+			if (err)
 				return err;
-			}
 
 			/* enable the device ref clock for HS mode*/
 			if (ufshcd_is_hs_mode(&hba->pwr_info))
@@ -1629,7 +1656,7 @@ static void ufs_qcom_exit(struct ufs_hba *hba)
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
 	ufs_qcom_disable_lane_clks(host);
-	phy_power_off(host->generic_phy);
+	ufs_qcom_phy_power_off(host);
 	phy_exit(host->generic_phy);
 }
 
