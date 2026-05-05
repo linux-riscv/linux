@@ -8,6 +8,7 @@
 
 struct tegra_xusb_padctl;
 struct device;
+struct phy;
 enum usb_device_speed;
 
 struct tegra_xusb_padctl *tegra_xusb_padctl_get(struct device *dev);

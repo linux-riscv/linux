@@ -19,7 +19,6 @@
 #include <linux/mutex.h>
 #include <linux/mux/consumer.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regulator/consumer.h>
@@ -28,6 +27,8 @@
 #include <linux/string.h>
 #include <linux/usb/of.h>
 #include <linux/workqueue.h>
+
+#include "../phy-provider.h"
 
 /******* USB2.0 Host registers (original offset is +0x200) *******/
 #define USB2_INT_ENABLE		0x000

@@ -14,10 +14,11 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/phy/pcie.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+
+#include "../phy-provider.h"
 
 /* Register for RK3568 */
 #define GRF_PCIE30PHY_CON1			0x4

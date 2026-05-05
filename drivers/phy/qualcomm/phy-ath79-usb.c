@@ -8,8 +8,9 @@
 #include <linux/mod_devicetable.h>
 #include <linux/module.h>
 #include <linux/platform_device.h>
-#include <linux/phy/phy.h>
 #include <linux/reset.h>
+
+#include "../phy-provider.h"
 
 struct ath79_usb_phy {
 	struct reset_control *reset;

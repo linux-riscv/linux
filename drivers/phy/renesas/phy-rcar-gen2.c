@@ -12,10 +12,11 @@
 #include <linux/io.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/spinlock.h>
 #include <linux/atomic.h>
+
+#include "../phy-provider.h"
 
 #define USBHS_LPSTS			0x02
 #define USBHS_UGCTRL			0x80

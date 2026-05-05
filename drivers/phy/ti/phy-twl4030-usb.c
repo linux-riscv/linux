@@ -20,7 +20,6 @@
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/usb/otg.h>
-#include <linux/phy/phy.h>
 #include <linux/pm_runtime.h>
 #include <linux/usb/musb.h>
 #include <linux/usb/ulpi.h>
@@ -28,6 +27,8 @@
 #include <linux/regulator/consumer.h>
 #include <linux/err.h>
 #include <linux/slab.h>
+
+#include "../phy-provider.h"
 
 /* Register defines */
 

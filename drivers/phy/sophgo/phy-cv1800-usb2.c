@@ -12,9 +12,10 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/platform_device.h>
-#include <linux/phy/phy.h>
 #include <linux/regmap.h>
 #include <linux/spinlock.h>
+
+#include "../phy-provider.h"
 
 #define REG_USB_PHY_CTRL		0x048
 

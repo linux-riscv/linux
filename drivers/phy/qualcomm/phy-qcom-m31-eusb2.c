@@ -18,6 +18,8 @@
 
 #include <linux/regulator/consumer.h>
 
+#include "../phy-provider.h"
+
 #define USB_PHY_UTMI_CTRL0		(0x3c)
 #define SLEEPM				BIT(0)
 

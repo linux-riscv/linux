@@ -12,9 +12,10 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
+
+#include "../phy-provider.h"
 
 struct uniphier_ahciphy_priv {
 	struct device *dev;

@@ -11,10 +11,11 @@
 #include <linux/iopoll.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/reset.h>
+
+#include "../phy-provider.h"
 
 #define USB3_TEST_RESET				0x0000
 #define USB3_TEST_UTMICTRL2			0x0b04

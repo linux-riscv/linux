@@ -12,9 +12,10 @@
 #include <linux/err.h>
 #include <linux/pm_runtime.h>
 #include <linux/delay.h>
-#include <linux/phy/phy.h>
 
 #include <linux/mfd/syscon.h>
+
+#include "../phy-provider.h"
 
 /*
  * TRM has two sets of USB_CTRL registers.. The correct register bits

@@ -15,10 +15,11 @@
 #include <linux/mfd/syscon.h>
 #include <linux/mux/consumer.h>
 #include <linux/of_address.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
+
+#include "../phy-provider.h"
 
 #define CMU_R004		0x4
 #define CMU_R060		0x60

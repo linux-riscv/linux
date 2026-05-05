@@ -9,10 +9,11 @@
 #include <linux/bitfield.h>
 #include <linux/clk.h>
 #include <linux/iopoll.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
 #include <linux/usb/of.h>
+
+#include "../phy-provider.h"
 
 #define PHY_RST_MODE_CTRL		0x04
 #define  PHY_PLL_RDY			BIT(0)

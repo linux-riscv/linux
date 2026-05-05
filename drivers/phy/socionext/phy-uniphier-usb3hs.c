@@ -17,11 +17,12 @@
 #include <linux/nvmem-consumer.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
+
+#include "../phy-provider.h"
 
 #define HSPHY_CFG0		0x0
 #define HSPHY_CFG0_HS_I_MASK	GENMASK(31, 28)

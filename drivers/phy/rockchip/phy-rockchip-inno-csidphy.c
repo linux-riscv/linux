@@ -13,12 +13,13 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_platform.h>
-#include <linux/phy/phy.h>
 #include <linux/phy/phy-mipi-dphy.h>
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
 #include <linux/regmap.h>
 #include <linux/reset.h>
+
+#include "../phy-provider.h"
 
 /* GRF */
 #define RK1808_GRF_PD_VI_CON_OFFSET	0x0430

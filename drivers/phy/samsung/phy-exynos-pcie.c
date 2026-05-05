@@ -12,8 +12,9 @@
 #include <linux/mfd/syscon.h>
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
-#include <linux/phy/phy.h>
 #include <linux/regmap.h>
+
+#include "../phy-provider.h"
 
 #define PCIE_PHY_OFFSET(x)		((x) * 0x4)
 

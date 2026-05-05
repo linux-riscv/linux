@@ -10,10 +10,11 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
+
+#include "../phy-provider.h"
 
 #define USB2PHY_PORT_UTMI_CTRL1		0x40
 

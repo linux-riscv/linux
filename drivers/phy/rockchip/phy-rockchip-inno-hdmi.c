@@ -17,8 +17,10 @@
 #include <linux/of.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
-#include <linux/phy/phy.h>
+#include <linux/phy/phy.h> /* for phy_get_bus_width() */
 #include <linux/slab.h>
+
+#include "../phy-provider.h"
 
 #define UPDATE(x, h, l)		(((x) << (l)) & GENMASK((h), (l)))
 

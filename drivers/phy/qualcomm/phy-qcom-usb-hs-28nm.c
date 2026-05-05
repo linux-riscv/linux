@@ -11,11 +11,12 @@
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_graph.h>
-#include <linux/phy/phy.h>
 #include <linux/platform_device.h>
 #include <linux/regulator/consumer.h>
 #include <linux/reset.h>
 #include <linux/slab.h>
+
+#include "../phy-provider.h"
 
 /* PHY register and bit definitions */
 #define PHY_CTRL_COMMON0		0x078
