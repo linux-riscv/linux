@@ -513,13 +513,6 @@ static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 
 
 	/* phy initialization - calibrate the phy */
-	ret = phy_init(phy);
-	if (ret) {
-		dev_err(hba->dev, "%s: phy init failed, ret = %d\n",
-			__func__, ret);
-		return ret;
-	}
-
 	ret = phy_set_mode_ext(phy, mode, host->phy_gear);
 	if (ret)
 		goto out_disable_phy;
@@ -529,23 +522,18 @@ static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 	if (ret) {
 		dev_err(hba->dev, "%s: phy power on failed, ret = %d\n",
 			__func__, ret);
-		goto out_disable_phy;
+		return ret;
 	}
 
 	ret = phy_calibrate(phy);
 	if (ret) {
 		dev_err(hba->dev, "Failed to calibrate PHY: %d\n", ret);
-		goto out_disable_phy;
+		return ret;
 	}
 
 	ufs_qcom_select_unipro_mode(host);
 
 	return 0;
-
-out_disable_phy:
-	phy_exit(phy);
-
-	return ret;
 }
 
 /*
@@ -1624,6 +1612,12 @@ static int ufs_qcom_init(struct ufs_hba *hba)
 	err = ufs_qcom_ice_init(host);
 	if (err)
 		goto out_variant_clear;
+
+	err = phy_init(host->generic_phy);
+	if (err) {
+		dev_err(hba->dev, "phy_init failed: %pe\n", ERR_PTR(err));
+		goto out_variant_clear;
+	}
 
 	ufs_qcom_setup_clocks(hba, true, POST_CHANGE);
 
