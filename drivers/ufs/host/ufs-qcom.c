@@ -485,7 +485,7 @@ static u32 ufs_qcom_get_hs_gear(struct ufs_hba *hba)
 	return UFS_HS_G3;
 }
 
-static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
+static int ufs_qcom_phy_change_mode(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 	struct ufs_host_params *host_params = &host->host_params;
@@ -508,26 +508,11 @@ static int ufs_qcom_power_up_sequence(struct ufs_hba *hba)
 	if (ret)
 		return ret;
 
-	if (phy->power_count)
-		phy_power_off(phy);
-
-
-	/* phy initialization - calibrate the phy */
 	ret = phy_set_mode_ext(phy, mode, host->phy_gear);
-	if (ret)
-		goto out_disable_phy;
-
-	/* power on phy - start serdes and phy's power and clocks */
-	ret = phy_power_on(phy);
 	if (ret) {
-		dev_err(hba->dev, "%s: phy power on failed, ret = %d\n",
-			__func__, ret);
-		return ret;
-	}
-
-	ret = phy_calibrate(phy);
-	if (ret) {
-		dev_err(hba->dev, "Failed to calibrate PHY: %d\n", ret);
+		dev_err(hba->dev,
+			"Failed to change PHY mode %d submode %d: %pe\n",
+			mode, host->phy_gear, ERR_PTR(ret));
 		return ret;
 	}
 
@@ -582,7 +567,7 @@ static int ufs_qcom_hce_enable_notify(struct ufs_hba *hba,
 
 	switch (status) {
 	case PRE_CHANGE:
-		err = ufs_qcom_power_up_sequence(hba);
+		err = ufs_qcom_phy_change_mode(hba);
 		if (err)
 			return err;
 

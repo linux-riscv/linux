@@ -2012,6 +2012,12 @@ static int qmp_ufs_set_mode(struct phy *phy, enum phy_mode mode, int submode)
 	qmp->mode = mode;
 	qmp->submode = submode;
 
+	if (phy->power_count) {
+		qmp_ufs_power_off(phy);
+		qmp_ufs_power_on(phy);
+		return qmp_ufs_phy_calibrate(phy);
+	}
+
 	return 0;
 }
 
