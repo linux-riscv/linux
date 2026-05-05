@@ -57,6 +57,7 @@ int phy_notify_disconnect(struct phy *phy, int port);
 int phy_notify_state(struct phy *phy, union phy_notify state);
 int phy_get_bus_width(struct phy *phy);
 int phy_request_bus_width(struct phy *phy, int bus_width);
+u32 phy_get_max_link_rate(const struct phy *phy);
 #else
 static inline struct phy *phy_get(struct device *dev, const char *string)
 {
@@ -259,6 +260,11 @@ static inline int phy_request_bus_width(struct phy *phy, int bus_width)
 		return 0;
 
 	return -ENOSYS;
+}
+
+static inline u32 phy_get_max_link_rate(const struct phy *phy)
+{
+	return 0;
 }
 #endif /* IS_ENABLED(CONFIG_GENERIC_PHY) */
 
