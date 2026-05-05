@@ -165,7 +165,6 @@ static int samsung_ufs_phy_init(struct phy *phy)
 {
 	struct samsung_ufs_phy *ss_phy = get_samsung_ufs_phy(phy);
 
-	ss_phy->lane_cnt = phy->attrs.bus_width;
 	ss_phy->ufs_phy_state = CFG_PRE_INIT;
 
 	return 0;
@@ -202,6 +201,31 @@ static int samsung_ufs_phy_power_off(struct phy *phy)
 	samsung_ufs_phy_ctrl_isol(ss_phy, true);
 
 	return 0;
+}
+
+static int samsung_ufs_phy_request_bus_width(struct phy *phy, int bus_width)
+{
+	struct samsung_ufs_phy *ss_phy = get_samsung_ufs_phy(phy);
+	u8 old_lane_cnt = ss_phy->lane_cnt;
+	int err = 0;
+
+	if (bus_width != 1 && bus_width != 2)
+		return -EINVAL;
+
+	ss_phy->lane_cnt = bus_width;
+
+	if (phy->init_count)
+		samsung_ufs_phy_init(phy);
+
+	/* If the init_count is 0, the power_count should also be 0 */
+	if (phy->power_count) {
+		samsung_ufs_phy_power_off(phy);
+		err = samsung_ufs_phy_power_on(phy);
+		if (err)
+			ss_phy->lane_cnt = old_lane_cnt;
+	}
+
+	return err;
 }
 
 static int samsung_ufs_phy_set_mode(struct phy *generic_phy,
@@ -272,6 +296,7 @@ static const struct phy_ops samsung_ufs_phy_ops = {
 	.calibrate	= samsung_ufs_phy_calibrate,
 	.set_mode	= samsung_ufs_phy_set_mode,
 	.notify_phystate = samsung_ufs_phy_notify_state,
+	.request_bus_width = samsung_ufs_phy_request_bus_width,
 	.owner          = THIS_MODULE,
 };
 

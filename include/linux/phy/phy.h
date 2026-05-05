@@ -93,6 +93,7 @@ union phy_configure_opts {
  * @reset: resetting the phy
  * @calibrate: calibrate the phy
  * @notify_phystate: notify and configure the phy for a particular state
+ * @request_bus_width: request a different bus width for the phy
  * @release: ops to be performed while the consumer relinquishes the PHY
  * @owner: the module owner containing the ops
  */
@@ -143,6 +144,7 @@ struct phy_ops {
 	int	(*disconnect)(struct phy *phy, int port);
 
 	int	(*notify_phystate)(struct phy *phy, union phy_notify state);
+	int	(*request_bus_width)(struct phy *phy, int bus_width);
 	void	(*release)(struct phy *phy);
 	struct module *owner;
 };
@@ -275,6 +277,7 @@ static inline void phy_set_bus_width(struct phy *phy, int bus_width)
 {
 	phy->attrs.bus_width = bus_width;
 }
+int phy_request_bus_width(struct phy *phy, int bus_width);
 struct phy *phy_get(struct device *dev, const char *string);
 struct phy *devm_phy_get(struct device *dev, const char *string);
 struct phy *devm_phy_optional_get(struct device *dev, const char *string);
@@ -454,6 +457,14 @@ static inline int phy_get_bus_width(struct phy *phy)
 static inline void phy_set_bus_width(struct phy *phy, int bus_width)
 {
 	return;
+}
+
+static inline int phy_request_bus_width(struct phy *phy, int bus_width)
+{
+	if (!phy)
+		return 0;
+
+	return -ENOSYS;
 }
 
 static inline struct phy *phy_get(struct device *dev, const char *string)

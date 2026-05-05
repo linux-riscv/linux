@@ -607,6 +607,41 @@ int phy_validate(struct phy *phy, enum phy_mode mode, int submode,
 EXPORT_SYMBOL_GPL(phy_validate);
 
 /**
+ * phy_request_bus_width() - request PHY to change its bus width
+ * @phy: the phy returned by phy_get()
+ * @bus_width: new bus width
+ *
+ * Consumers can use this method to request the PHY to update itself to a new
+ * bus width (typically meaning lane count). Can be called from any init state
+ * and power state. PHY is expected to use the new lane count as soon as this
+ * method returns.
+ *
+ * Returns: 0 if successful or if operating on an optional and absent PHY,
+ *	-EOPNOTSUPP if the operation is not implemented, -EINVAL if the
+ *	requested bus width is not supported, other negative error codes for
+ *	driver-specific failures.
+ */
+int phy_request_bus_width(struct phy *phy, int bus_width)
+{
+	int ret;
+
+	if (!phy)
+		return 0;
+
+	if (!phy->ops->request_bus_width)
+		return -EOPNOTSUPP;
+
+	mutex_lock(&phy->mutex);
+	ret = phy->ops->request_bus_width(phy, bus_width);
+	if (!ret)
+		phy_set_bus_width(phy, bus_width);
+	mutex_unlock(&phy->mutex);
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(phy_request_bus_width);
+
+/**
  * _of_phy_get() - lookup and obtain a reference to a phy by phandle
  * @np: device_node for which to get the phy
  * @index: the index of the phy
