@@ -11,6 +11,25 @@
 #include <linux/blkdev.h>
 #include <linux/mm.h>
 
+/*
+ * While the RAID6 algorithm could in theory support 3 devices by just copying
+ * the data disk to the two parity disks, this configuration is not only useless
+ * because it is a suboptimal version of 3-way mirroring, but also easy to get
+ * wrong in architecture-optimized implementations due to special casing, so
+ * don't support it.
+ */
+#define RAID6_MIN_DISKS		4
+
+void raid6_gen_syndrome(int disks, size_t bytes, void **ptrs);
+void raid6_xor_syndrome(int disks, int start, int stop, size_t bytes,
+		void **ptrs);
+bool raid6_can_xor_syndrome(void);
+
+void raid6_recov_2data(int disks, size_t bytes, int faila, int failb,
+		void **ptrs);
+void raid6_recov_datap(int disks, size_t bytes, int faila,
+		void **ptrs);
+
 /* Routine choices */
 struct raid6_calls {
 	void (*gen_syndrome)(int, size_t, void **);
@@ -19,9 +38,6 @@ struct raid6_calls {
 	const char *name;	/* Name of this routine set */
 	int priority;		/* Relative priority ranking if non-zero */
 };
-
-/* Selected algorithm */
-extern struct raid6_calls raid6_call;
 
 /* Various routine sets */
 extern const struct raid6_calls raid6_intx1;
@@ -91,11 +107,5 @@ extern const u8 raid6_gfexp[256]      __attribute__((aligned(256)));
 extern const u8 raid6_gflog[256]      __attribute__((aligned(256)));
 extern const u8 raid6_gfinv[256]      __attribute__((aligned(256)));
 extern const u8 raid6_gfexi[256]      __attribute__((aligned(256)));
-
-/* Recovery routines */
-extern void (*raid6_2data_recov)(int disks, size_t bytes, int faila, int failb,
-		       void **ptrs);
-extern void (*raid6_datap_recov)(int disks, size_t bytes, int faila,
-			void **ptrs);
 
 #endif /* LINUX_RAID_RAID6_H */
