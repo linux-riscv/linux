@@ -8,6 +8,7 @@
 #include <kunit/test.h>
 #include <linux/prandom.h>
 #include <linux/vmalloc.h>
+#include <linux/raid/pq.h>
 #include "../algos.h"
 
 MODULE_IMPORT_NS("EXPORTED_FOR_KUNIT_TESTING");
@@ -41,6 +42,12 @@ static u32 rand32(void)
 static unsigned int random_length(unsigned int max_length)
 {
 	return round_up((rand32() % max_length) + 1, 512);
+}
+
+static unsigned int random_nr_buffers(void)
+{
+	return (rand32() % (RAID6_KUNIT_MAX_BUFFERS - (RAID6_MIN_DISKS - 1))) +
+			RAID6_MIN_DISKS;
 }
 
 static void makedata(int start, int stop)
@@ -169,9 +176,7 @@ static void test_rmw(struct kunit *test, unsigned int nr_buffers,
 static void raid6_test_one(struct kunit *test)
 {
 	const struct test_args *ta = test->param_value;
-	/* including P/Q we need at least three buffers */
-	unsigned int nr_buffers =
-		(rand32() % (RAID6_KUNIT_MAX_BUFFERS - 2)) + 3;
+	unsigned int nr_buffers = random_nr_buffers();
 	unsigned int len = random_length(RAID6_KUNIT_MAX_BYTES);
 
 	/* Nuke syndromes */
