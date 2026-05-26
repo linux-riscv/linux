@@ -337,8 +337,10 @@ static int kgdb_riscv_notify(struct notifier_block *self, unsigned long cmd,
 	local_irq_save(flags);
 
 	if (kgdb_handle_exception(type == KGDB_SW_SINGLE_STEP ? 0 : 1,
-				  args->signr, cmd, regs))
+				  args->signr, cmd, regs)) {
+		local_irq_restore(flags);
 		return NOTIFY_DONE;
+	}
 
 	if (type == KGDB_COMPILED_BREAK)
 		regs->epc += 4;
