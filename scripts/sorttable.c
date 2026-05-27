@@ -901,9 +901,15 @@ static int do_file(char const *const fname, void *addr)
 		/* fallthrough */
 	case EM_386:
 	case EM_LOONGARCH:
-	case EM_RISCV:
 	case EM_S390:
 	case EM_X86_64:
+		custom_sort = sort_relative_table_with_data;
+		break;
+	case EM_RISCV:
+#ifdef MCOUNT_SORT_ENABLED
+		/* RISC-V uses patchable function entries before function entry. */
+		before_func = 8;
+#endif
 		custom_sort = sort_relative_table_with_data;
 		break;
 	case EM_PARISC:
