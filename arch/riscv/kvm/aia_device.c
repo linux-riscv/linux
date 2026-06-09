@@ -86,8 +86,16 @@ static int aia_config(struct kvm *kvm, unsigned long type,
 			if ((*nr < KVM_DEV_RISCV_AIA_IDS_MIN) ||
 			    (*nr >= KVM_DEV_RISCV_AIA_IDS_MAX) ||
 			    ((*nr & KVM_DEV_RISCV_AIA_IDS_MIN) !=
-			     KVM_DEV_RISCV_AIA_IDS_MIN) ||
-			    (kvm_riscv_aia_max_ids <= *nr))
+			     KVM_DEV_RISCV_AIA_IDS_MIN))
+				return -EINVAL;
+			/*
+			 * kvm_riscv_aia_max_ids reflects the per-vsfile
+			 * silicon limit, which only applies in HWACCEL
+			 * mode.  EMUL uses swfile, and AUTO is reconciled
+			 * later during init, so neither gates here.
+			 */
+			if (aia->mode == KVM_DEV_RISCV_AIA_MODE_HWACCEL &&
+			    kvm_riscv_aia_max_ids <= *nr)
 				return -EINVAL;
 			aia->nr_ids = *nr;
 		} else
@@ -95,8 +103,15 @@ static int aia_config(struct kvm *kvm, unsigned long type,
 		break;
 	case KVM_DEV_RISCV_AIA_CONFIG_SRCS:
 		if (write) {
-			if ((*nr >= KVM_DEV_RISCV_AIA_SRCS_MAX) ||
-			    (*nr >= kvm_riscv_aia_max_ids))
+			if (*nr >= KVM_DEV_RISCV_AIA_SRCS_MAX)
+				return -EINVAL;
+			/*
+			 * Same rationale as CONFIG_IDS: the silicon
+			 * per-vsfile cap only applies in HWACCEL mode.
+			 * EMUL uses swfile; AUTO is reconciled at init.
+			 */
+			if (aia->mode == KVM_DEV_RISCV_AIA_MODE_HWACCEL &&
+			    *nr >= kvm_riscv_aia_max_ids)
 				return -EINVAL;
 			aia->nr_sources = *nr;
 		} else
