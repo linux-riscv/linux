@@ -19,6 +19,10 @@ else
 	COMPAT_MARCH := rv32imafd
 endif
 
+ifneq ($(call cc-option,-mabi=ilp32 -march=rv32ima_zacas),)
+COMPAT_MARCH := $(COMPAT_MARCH)_zacas
+endif
+
 COMPAT_CC_FLAGS := -march=$(COMPAT_MARCH) -mabi=ilp32
 
 COMPAT_LD_FLAGS := -melf32lriscv
