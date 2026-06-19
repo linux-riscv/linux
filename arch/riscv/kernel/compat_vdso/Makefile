@@ -14,10 +14,13 @@ COMPAT_LD := $(LD)
 # binutils 2.35 does not support the zifencei extension, but in the ISA
 # spec 20191213, G stands for IMAFD_ZICSR_ZIFENCEI.
 ifdef CONFIG_TOOLCHAIN_NEEDS_EXPLICIT_ZICSR_ZIFENCEI
-	COMPAT_CC_FLAGS := -march=rv32g -mabi=ilp32
+	COMPAT_MARCH := rv32g
 else
-	COMPAT_CC_FLAGS := -march=rv32imafd -mabi=ilp32
+	COMPAT_MARCH := rv32imafd
 endif
+
+COMPAT_CC_FLAGS := -march=$(COMPAT_MARCH) -mabi=ilp32
+
 COMPAT_LD_FLAGS := -melf32lriscv
 
 # Disable attributes, as they're useless and break the build.
