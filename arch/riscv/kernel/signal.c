@@ -13,6 +13,7 @@
 #include <linux/resume_user_mode.h>
 #include <linux/linkage.h>
 #include <linux/entry-common.h>
+#include <linux/vmcore_info.h>
 
 #include <asm/ucontext.h>
 #include <asm/vdso.h>
@@ -39,6 +40,13 @@ struct rt_sigframe {
 	u32 sigreturn_code[2];
 #endif
 };
+
+#ifdef CONFIG_VMCORE_INFO
+void riscv_rt_signal_frame(void)
+{
+	VMCOREINFO_OFFSET(rt_sigframe, uc);
+}
+#endif
 
 #ifdef CONFIG_FPU
 static long restore_fp_state(struct pt_regs *regs,

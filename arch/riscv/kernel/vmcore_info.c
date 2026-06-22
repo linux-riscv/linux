@@ -3,6 +3,12 @@
 #include <linux/vmcore_info.h>
 #include <linux/pagemap.h>
 
+#include <asm/processor.h>
+#include <asm/pgtable-bits.h>
+#include <asm/sigcontext.h>
+
+extern void riscv_rt_signal_frame(void);
+
 static inline u64 get_satp_value(void)
 {
 	return csr_read(CSR_SATP);
@@ -28,4 +34,9 @@ void arch_crash_save_vmcoreinfo(void)
 						kernel_map.va_kernel_pa_offset);
 	vmcoreinfo_append_str("KERNELOFFSET=%lx\n", kaslr_offset());
 	vmcoreinfo_append_str("NUMBER(satp)=0x%llx\n", get_satp_value());
+	riscv_rt_signal_frame();
+
+	VMCOREINFO_NUMBER(STACK_ALIGN);
+	VMCOREINFO_OFFSET(sigcontext, sc_regs);
+	VMCOREINFO_NUMBER(_PAGE_PFN_SHIFT);
 }

@@ -595,6 +595,32 @@ va_kernel_pa_offset
 Indicates the offset between the kernel virtual and physical mappings.
 Used to translate virtual to physical addresses.
 
+STACK_ALIGN
+-----------
+
+Stack alignment requirement for the architecture. Used to locate signal
+frames on the user stack.
+
+(sigcontext, sc_regs)
+---------------------
+
+Offset of the saved register array within struct sigcontext. Used to
+extract user-space register state from signal frames in a vmcore dump.
+
+_PAGE_PFN_SHIFT
+---------------
+
+The bit shift to extract the PFN from a page table entry. Used for
+virtual-to-physical address translation when walking page tables from
+a vmcore dump.
+
+(rt_sigframe, uc)
+-----------------
+
+Offset of the ucontext member within the RISC-V rt_sigframe structure.
+Used to locate the signal context (and thus saved registers) within a
+signal frame on the user stack.
+
 Task and VMA metadata
 =====================
 
