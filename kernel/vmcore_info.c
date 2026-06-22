@@ -17,6 +17,7 @@
 
 #include <asm/page.h>
 #include <asm/sections.h>
+#include <asm/ucontext.h>
 
 #include "kallsyms_internal.h"
 #include "kexec_internal.h"
@@ -243,6 +244,65 @@ static int __init crash_save_vmcoreinfo_init(void)
 	VMCOREINFO_SYMBOL(kallsyms_token_index);
 	VMCOREINFO_SYMBOL(kallsyms_offsets);
 #endif /* CONFIG_KALLSYMS */
+
+	VMCOREINFO_SYMBOL(init_task);
+	VMCOREINFO_STRUCT_SIZE(task_struct);
+	VMCOREINFO_OFFSET(task_struct, tasks);
+	VMCOREINFO_OFFSET(task_struct, thread_node);
+	VMCOREINFO_OFFSET(task_struct, pid);
+	VMCOREINFO_OFFSET(task_struct, tgid);
+	VMCOREINFO_OFFSET(task_struct, exit_state);
+	VMCOREINFO_OFFSET(task_struct, __state);
+	VMCOREINFO_OFFSET(task_struct, flags);
+	VMCOREINFO_OFFSET(task_struct, comm);
+	VMCOREINFO_OFFSET(task_struct, stack);
+	VMCOREINFO_OFFSET(task_struct, signal);
+	VMCOREINFO_OFFSET(signal_struct, thread_head);
+	VMCOREINFO_OFFSET(signal_struct, nr_threads);
+	VMCOREINFO_OFFSET(task_struct, mm);
+	VMCOREINFO_STRUCT_SIZE(mm_struct);
+	VMCOREINFO_OFFSET(mm_struct, mm_mt);
+	VMCOREINFO_OFFSET(mm_struct, pgd);
+	VMCOREINFO_OFFSET(mm_struct, start_brk);
+	VMCOREINFO_OFFSET(mm_struct, brk);
+	VMCOREINFO_OFFSET(mm_struct, start_stack);
+	VMCOREINFO_STRUCT_SIZE(maple_tree);
+	VMCOREINFO_OFFSET(maple_tree, ma_root);
+	VMCOREINFO_OFFSET(maple_tree, ma_flags);
+	VMCOREINFO_STRUCT_SIZE(maple_node);
+	VMCOREINFO_OFFSET(maple_node, slot);
+	VMCOREINFO_OFFSET(maple_node, parent);
+	VMCOREINFO_OFFSET(maple_node, ma64);
+	VMCOREINFO_OFFSET(maple_node, mr64);
+	VMCOREINFO_OFFSET(maple_range_64, pivot);
+	VMCOREINFO_OFFSET(maple_range_64, slot);
+	VMCOREINFO_OFFSET(maple_metadata, end);
+	VMCOREINFO_OFFSET(maple_metadata, gap);
+	VMCOREINFO_OFFSET(maple_arange_64, pivot);
+	VMCOREINFO_OFFSET(maple_arange_64, slot);
+	VMCOREINFO_OFFSET(maple_arange_64, gap);
+	VMCOREINFO_OFFSET(maple_arange_64, meta);
+	VMCOREINFO_STRUCT_SIZE(vm_area_struct);
+	VMCOREINFO_OFFSET(vm_area_struct, vm_start);
+	VMCOREINFO_OFFSET(vm_area_struct, vm_end);
+	VMCOREINFO_OFFSET(vm_area_struct, vm_flags);
+	VMCOREINFO_OFFSET(vm_area_struct, vm_file);
+	VMCOREINFO_OFFSET(vm_area_struct, vm_mm);
+	VMCOREINFO_STRUCT_SIZE(file);
+	VMCOREINFO_OFFSET(file, f_path);
+	VMCOREINFO_OFFSET(path, dentry);
+	VMCOREINFO_STRUCT_SIZE(dentry);
+	VMCOREINFO_OFFSET(dentry, d_name);
+	VMCOREINFO_OFFSET(dentry, d_parent);
+	VMCOREINFO_OFFSET(qstr, hash_len);
+	VMCOREINFO_OFFSET(qstr, name);
+	VMCOREINFO_NUMBER(THREAD_SIZE);
+	VMCOREINFO_STRUCT_SIZE(pt_regs);
+	VMCOREINFO_OFFSET(ucontext, uc_mcontext);
+	VMCOREINFO_NUMBER(__NR_rt_sigreturn);
+	VMCOREINFO_NUMBER(CONFIG_PGTABLE_LEVELS);
+	VMCOREINFO_NUMBER(PMD_SHIFT);
+	VMCOREINFO_NUMBER(PGDIR_SHIFT);
 
 	arch_crash_save_vmcoreinfo();
 	update_vmcoreinfo_note();

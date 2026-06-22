@@ -594,3 +594,80 @@ va_kernel_pa_offset
 
 Indicates the offset between the kernel virtual and physical mappings.
 Used to translate virtual to physical addresses.
+
+Task and VMA metadata
+=====================
+
+The following vmcoreinfo entries export struct offsets and sizes needed
+to walk task lists, extract register state, and enumerate VMAs from a
+vmcore dump without requiring kernel debug symbols (DWARF/BTF). Used by
+the vmcore-tasks userspace tool for lightweight post-mortem crash
+analysis.
+
+init_task
+---------
+
+The address of the initial task (swapper). Used as the starting point
+to walk the circular task list via the tasks member.
+
+(task_struct, tasks)|(task_struct, pid)|(task_struct, tgid)|(task_struct, comm)|(task_struct, mm)|(task_struct, stack)|(task_struct, signal)|(task_struct, flags)|(task_struct, __state)|(task_struct, exit_state)|(task_struct, thread_node)
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+Offsets into task_struct needed to extract per-task metadata: process
+name, PID/TGID, task state, kernel stack pointer, mm_struct pointer,
+signal_struct pointer, and thread group linkage.
+
+(signal_struct, thread_head)|(signal_struct, nr_threads)
+--------------------------------------------------------
+
+Offsets into signal_struct for walking the thread group list and
+determining the number of threads.
+
+(mm_struct, mm_mt)|(mm_struct, pgd)|(mm_struct, start_brk)|(mm_struct, brk)|(mm_struct, start_stack)
+----------------------------------------------------------------------------------------------------
+
+Offsets into mm_struct for accessing the VMA maple tree, page global
+directory, and memory layout boundaries.
+
+Maple tree internals
+--------------------
+
+Offsets for maple_tree, maple_node, maple_range_64, maple_arange_64,
+and maple_metadata structures. These are needed to walk the maple tree
+that stores VMAs (mm_struct.mm_mt) from a vmcore dump.
+
+(vm_area_struct, vm_start)|(vm_area_struct, vm_end)|(vm_area_struct, vm_flags)|(vm_area_struct, vm_file)|(vm_area_struct, vm_mm)
+-------------------------------------------------------------------------------------------------------------------------------
+
+Offsets into vm_area_struct for extracting VMA boundaries, permissions,
+backing file, and owning mm_struct.
+
+(file, f_path)|(path, dentry)|(dentry, d_name)|(dentry, d_parent)|(qstr, hash_len)|(qstr, name)
+------------------------------------------------------------------------------------------------
+
+Offsets for traversing file -> path -> dentry -> name to reconstruct
+the filename backing a VMA.
+
+THREAD_SIZE
+-----------
+
+The size of the kernel stack. Used to locate the pt_regs saved at the
+top of the kernel stack for each task.
+
+(ucontext, uc_mcontext)
+-----------------------
+
+Offset of the machine context within struct ucontext. Used to locate
+saved registers within a signal frame.
+
+__NR_rt_sigreturn
+-----------------
+
+The rt_sigreturn syscall number. Used to identify signal frame return
+trampolines on the user stack during backtrace reconstruction.
+
+CONFIG_PGTABLE_LEVELS|PMD_SHIFT|PGDIR_SHIFT
+--------------------------------------------
+
+Page table geometry constants. Used for walking page tables to translate
+user virtual addresses to physical addresses in a vmcore dump.
