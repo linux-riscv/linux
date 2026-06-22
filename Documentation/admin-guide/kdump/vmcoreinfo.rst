@@ -494,6 +494,40 @@ Used to get the vmalloc_start address from the high_memory symbol.
 
 The maximum number of CPUs.
 
+MIPS
+====
+
+(rt_sigframe, rs_uc)
+--------------------
+
+Offset of the ucontext member within the MIPS rt_sigframe structure.
+Used to locate the signal context within a signal frame on the user
+stack.
+
+(sigcontext, sc_regs)
+---------------------
+
+Offset of the saved register array within struct sigcontext. Used to
+extract user-space register state from signal frames in a vmcore dump.
+
+PAGE_SHIFT
+----------
+
+The base-2 logarithm of the page size. Used for page frame number
+calculations during address translation.
+
+_PFN_MASK|_PAGE_PRESENT|_PAGE_VALID|_PAGE_GLOBAL
+-------------------------------------------------
+
+Page table entry bit masks and flags. Used for walking MIPS page tables
+and translating virtual to physical addresses in a vmcore dump.
+
+PTRS_PER_PGD|PTRS_PER_PMD|PTRS_PER_PTE
+---------------------------------------
+
+Number of entries per page table level. Used for page table walking
+during virtual-to-physical address translation.
+
 powerpc
 =======
 

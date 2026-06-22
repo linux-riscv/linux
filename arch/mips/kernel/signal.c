@@ -26,6 +26,7 @@
 #include <linux/syscalls.h>
 #include <linux/uaccess.h>
 #include <linux/resume_user_mode.h>
+#include <linux/vmcore_info.h>
 
 #include <asm/abi.h>
 #include <asm/asm.h>
@@ -61,6 +62,13 @@ struct rt_sigframe {
 	struct siginfo rs_info;
 	struct ucontext rs_uc;
 };
+
+#ifdef CONFIG_VMCORE_INFO
+void mips_rt_signal_frame(void)
+{
+	VMCOREINFO_OFFSET(rt_sigframe, rs_uc);
+}
+#endif
 
 #ifdef CONFIG_MIPS_FP_SUPPORT
 
