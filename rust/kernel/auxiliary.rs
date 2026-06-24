@@ -93,7 +93,9 @@ impl<T: Driver> Adapter<T> {
         // SAFETY: `DeviceId` is a `#[repr(transparent)`] wrapper of `struct auxiliary_device_id`
         // and does not add additional invariants, so it's safe to transmute.
         let id = unsafe { &*id.cast::<DeviceId>() };
-        let info = T::ID_TABLE.info(id.index());
+
+        // SAFETY: `id` comes from `T::ID_TABLE` which is of type `IdArray<_, T::IdInfo>`.
+        let info = unsafe { id.info_unchecked::<T::IdInfo>() };
 
         from_result(|| {
             let data = T::probe(adev, info);
@@ -169,10 +171,6 @@ unsafe impl RawDeviceId for DeviceId {
 unsafe impl RawDeviceIdIndex for DeviceId {
     const DRIVER_DATA_OFFSET: usize =
         core::mem::offset_of!(bindings::auxiliary_device_id, driver_data);
-
-    fn index(&self) -> usize {
-        self.0.driver_data
-    }
 }
 
 /// IdTable type for auxiliary drivers.
@@ -181,14 +179,8 @@ pub type IdTable<T> = &'static dyn kernel::device_id::IdTable<DeviceId, T>;
 /// Create a auxiliary `IdTable` with its alias for modpost.
 #[macro_export]
 macro_rules! auxiliary_device_table {
-    ($table_name:ident, $module_table_name:ident, $id_info_type: ty, $table_data: expr) => {
-        const $table_name: $crate::device_id::IdArray<
-            $crate::auxiliary::DeviceId,
-            $id_info_type,
-            { $table_data.len() },
-        > = $crate::device_id::IdArray::new($table_data);
-
-        $crate::module_device_table!("auxiliary", $module_table_name, $table_name);
+    ($($tt:tt)*) => {
+        $crate::module_device_table!("auxiliary", $crate::auxiliary::DeviceId, $($tt)*);
     };
 }
 
