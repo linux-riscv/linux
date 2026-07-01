@@ -128,7 +128,7 @@ static __always_inline bool int80_is_external(void)
  */
 __visible noinstr void do_int80_emulation(struct pt_regs *regs)
 {
-	int nr;
+	long nr;
 
 	/* Kernel does not use INT $0x80! */
 	if (unlikely(!user_mode(regs))) {
@@ -168,8 +168,7 @@ __visible noinstr void do_int80_emulation(struct pt_regs *regs)
 	nr = syscall_32_enter(regs);
 
 	local_irq_enable();
-	nr = syscall_enter_from_user_mode_work(regs, nr);
-	do_syscall_32_irqs_on(regs, nr);
+	syscall_enter_from_user_mode_work(regs, &nr);
 
 	instrumentation_end();
 	syscall_exit_to_user_mode(regs);
@@ -208,7 +207,7 @@ __visible noinstr void do_int80_emulation(struct pt_regs *regs)
  */
 DEFINE_FREDENTRY_RAW(int80_emulation)
 {
-	int nr;
+	long nr;
 
 	enter_from_user_mode(regs);
 
@@ -232,8 +231,10 @@ DEFINE_FREDENTRY_RAW(int80_emulation)
 	nr = syscall_32_enter(regs);
 
 	local_irq_enable();
-	nr = syscall_enter_from_user_mode_work(regs, nr);
-	do_syscall_32_irqs_on(regs, nr);
+	if (!syscall_enter_from_user_mode_work(regs, &nr)) {
+		nr &= GENMASK(31, 0);
+		do_syscall_32_irqs_on(regs, nr);
+	}
 
 	instrumentation_end();
 	syscall_exit_to_user_mode(regs);
@@ -245,20 +246,17 @@ DEFINE_FREDENTRY_RAW(int80_emulation)
 /* Handles int $0x80 on a 32bit kernel */
 __visible noinstr void do_int80_syscall_32(struct pt_regs *regs)
 {
-	int nr = syscall_32_enter(regs);
-
-	/*
-	 * Subtlety here: if ptrace pokes something larger than 2^31-1 into
-	 * orig_ax, the int return value truncates it. This matches
-	 * the semantics of syscall_get_nr().
-	 */
-	nr = syscall_enter_from_user_mode(regs, nr);
-	instrumentation_begin();
+	long nr = syscall_32_enter(regs);
 
 	add_random_kstack_offset();
-	do_syscall_32_irqs_on(regs, nr);
+	if (!syscall_enter_from_user_mode(regs, &nr)) {
+		instrumentation_begin();
 
-	instrumentation_end();
+		nr &= & GENMASK(31, 0);
+		do_syscall_32_irqs_on(regs, nr);
+
+		instrumentation_end();
+	}
 	syscall_exit_to_user_mode(regs);
 }
 #endif /* !CONFIG_IA32_EMULATION */
@@ -301,10 +299,9 @@ static noinstr bool __do_fast_syscall_32(struct pt_regs *regs)
 		return false;
 	}
 
-	nr = syscall_enter_from_user_mode_work(regs, nr);
-
-	/* Now this is just like a normal syscall. */
-	do_syscall_32_irqs_on(regs, nr);
+	if (!syscall_enter_from_user_mode_work(regs, &nr))
+		/* Now this is just like a normal syscall. */
+		do_syscall_32_irqs_on(regs, nr);
 
 	instrumentation_end();
 	syscall_exit_to_user_mode(regs);

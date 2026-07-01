@@ -68,12 +68,14 @@ invoked from low-level assembly code looks like this:
   noinstr void syscall(struct pt_regs *regs, int nr)
   {
 	arch_syscall_enter(regs);
-	nr = syscall_enter_from_user_mode(regs, nr);
 
-	instrumentation_begin();
-	if (!invoke_syscall(regs, nr) && nr != -1)
-	 	result_reg(regs) = __sys_ni_syscall(regs);
-	instrumentation_end();
+	/* Skip syscall when -1 is returned */
+	if (!syscall_enter_from_user_mode(regs, &nr)) {
+		instrumentation_begin();
+		if (!invoke_syscall(regs, nr) && nr != -1)
+			result_reg(regs) = __sys_ni_syscall(regs);
+		instrumentation_end();
+	}
 
 	syscall_exit_to_user_mode(regs);
   }

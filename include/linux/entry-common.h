@@ -69,10 +69,8 @@ static inline void syscall_enter_audit(struct pt_regs *regs, long syscall)
 	}
 }
 
-static __always_inline long syscall_trace_enter(struct pt_regs *regs, unsigned long work)
+static __always_inline long syscall_trace_enter(struct pt_regs *regs, unsigned long work, unsigned long *syscall)
 {
-	long syscall, ret = 0;
-
 	/*
 	 * Handle Syscall User Dispatch.  This must comes first, since
 	 * the ABI here can be something that doesn't make sense for
@@ -93,27 +91,25 @@ static __always_inline long syscall_trace_enter(struct pt_regs *regs, unsigned l
 
 	/* Handle ptrace */
 	if (work & (SYSCALL_WORK_SYSCALL_TRACE | SYSCALL_WORK_SYSCALL_EMU)) {
-		ret = arch_ptrace_report_syscall_entry(regs);
-		if (ret || (work & SYSCALL_WORK_SYSCALL_EMU))
+		if (arch_ptrace_report_syscall_entry(regs) || (work & SYSCALL_WORK_SYSCALL_EMU))
 			return -1L;
 	}
 
 	/* Do seccomp after ptrace, to catch any tracer changes. */
 	if (work & SYSCALL_WORK_SECCOMP) {
-		ret = __secure_computing();
-		if (ret == -1L)
-			return ret;
+		if (__secure_computing())
+			return -1L;
 	}
 
 	/* Either of the above might have changed the syscall number */
-	syscall = syscall_get_nr(current, regs);
+	*syscall = syscall_get_nr(current, regs);
 
 	if (unlikely(work & SYSCALL_WORK_SYSCALL_TRACEPOINT))
-		syscall = trace_syscall_enter(regs, syscall);
+		*syscall = trace_syscall_enter(regs, *syscall);
 
-	syscall_enter_audit(regs, syscall);
+	syscall_enter_audit(regs, *syscall);
 
-	return ret ? : syscall;
+	return 0;
 }
 
 /**
@@ -126,12 +122,12 @@ static __always_inline long syscall_trace_enter(struct pt_regs *regs, unsigned l
  * enabled after invoking enter_from_user_mode(), enabling interrupts and
  * extra architecture specific work.
  *
- * Returns: The original or a modified syscall number
+ * Returns: The original or a modified syscall number as syscall
  *
- * If the returned syscall number is -1 then the syscall should be
- * skipped. In this case the caller may invoke syscall_set_error() or
- * syscall_set_return_value() first.  If neither of those are called and -1
- * is returned, then the syscall will fail with ENOSYS.
+ * If the returned value is -1 then the syscall should be skipped. In this case
+ * the caller may invoke syscall_set_error() or syscall_set_return_value()
+ * first.  If neither of those are called and -1 is returned, then the syscall
+ * will fail with ENOSYS.
  *
  * It handles the following work items:
  *
@@ -139,14 +135,14 @@ static __always_inline long syscall_trace_enter(struct pt_regs *regs, unsigned l
  *     ptrace_report_syscall_entry(), __secure_computing(), trace_sys_enter()
  *  2) Invocation of audit_syscall_entry()
  */
-static __always_inline long syscall_enter_from_user_mode_work(struct pt_regs *regs, long syscall)
+static __always_inline long syscall_enter_from_user_mode_work(struct pt_regs *regs, long *syscall)
 {
 	unsigned long work = READ_ONCE(current_thread_info()->syscall_work);
 
 	if (work & SYSCALL_WORK_ENTER)
-		syscall = syscall_trace_enter(regs, work);
+		return syscall_trace_enter(regs, work, syscall);
 
-	return syscall;
+	return 0;
 }
 
 /**
@@ -167,7 +163,7 @@ static __always_inline long syscall_enter_from_user_mode_work(struct pt_regs *re
  * Returns: The original or a modified syscall number. See
  * syscall_enter_from_user_mode_work() for further explanation.
  */
-static __always_inline long syscall_enter_from_user_mode(struct pt_regs *regs, long syscall)
+static __always_inline long syscall_enter_from_user_mode(struct pt_regs *regs, long *syscall)
 {
 	long ret;
 

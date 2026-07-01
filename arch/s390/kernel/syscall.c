@@ -95,7 +95,7 @@ SYSCALL_DEFINE0(ni_syscall)
 
 void noinstr __do_syscall(struct pt_regs *regs, int per_trap)
 {
-	unsigned long nr;
+	unsigned long nr, ret;
 
 	enter_from_user_mode(regs);
 	add_random_kstack_offset();
@@ -121,7 +121,7 @@ void noinstr __do_syscall(struct pt_regs *regs, int per_trap)
 		regs->psw.addr = current->restart_block.arch_data;
 		current->restart_block.arch_data = 1;
 	}
-	nr = syscall_enter_from_user_mode_work(regs, nr);
+	ret = syscall_enter_from_user_mode_work(regs, &nr);
 	/*
 	 * In the s390 ptrace ABI, both the syscall number and the return value
 	 * use gpr2. However, userspace puts the syscall number either in the
@@ -129,7 +129,7 @@ void noinstr __do_syscall(struct pt_regs *regs, int per_trap)
 	 * work, the ptrace code sets PIF_SYSCALL_RET_SET, which is checked here
 	 * and if set, the syscall will be skipped.
 	 */
-	if (unlikely(test_and_clear_pt_regs_flag(regs, PIF_SYSCALL_RET_SET)))
+	if (unlikely(test_and_clear_pt_regs_flag(regs, PIF_SYSCALL_RET_SET) || ret))
 		goto out;
 	regs->gprs[2] = -ENOSYS;
 	if (likely(nr < NR_syscalls)) {

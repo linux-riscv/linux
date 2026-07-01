@@ -325,7 +325,7 @@ asmlinkage __visible __trap_section  __no_stack_protector
 void do_trap_ecall_u(struct pt_regs *regs)
 {
 	if (user_mode(regs)) {
-		long syscall = regs->a7;
+		long ret, syscall = regs->a7;
 
 		regs->epc += 4;
 		regs->orig_a0 = regs->a0;
@@ -333,11 +333,11 @@ void do_trap_ecall_u(struct pt_regs *regs)
 
 		riscv_v_vstate_discard(regs);
 
-		syscall = syscall_enter_from_user_mode(regs, syscall);
+		ret = syscall_enter_from_user_mode(regs, &syscall);
 
 		add_random_kstack_offset();
 
-		if (syscall >= 0 && syscall < NR_syscalls) {
+		if (syscall >= 0 && syscall < NR_syscalls && !ret) {
 			syscall = array_index_nospec(syscall, NR_syscalls);
 			syscall_handler(regs, syscall);
 		}
