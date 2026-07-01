@@ -322,4 +322,10 @@ void kvm_riscv_vcpu_record_steal_time(struct kvm_vcpu *vcpu);
 /* Flags representing implementation specific details */
 DECLARE_STATIC_KEY_FALSE(kvm_riscv_vsstage_tlb_no_gpa);
 
+#ifdef CONFIG_PTDUMP_GSTAGE_DEBUGFS
+void kvm_s2_ptdump_create_debugfs(struct kvm *kvm);
+#else
+static inline void kvm_s2_ptdump_create_debugfs(struct kvm *kvm) {}
+#endif
+
 #endif /* __RISCV_KVM_HOST_H__ */

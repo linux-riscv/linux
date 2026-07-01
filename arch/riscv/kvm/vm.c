@@ -269,3 +269,8 @@ int kvm_arch_vm_ioctl(struct file *filp, unsigned int ioctl, unsigned long arg)
 {
 	return -EINVAL;
 }
+
+void kvm_arch_create_vm_debugfs(struct kvm *kvm)
+{
+	kvm_s2_ptdump_create_debugfs(kvm);
+}
