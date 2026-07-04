@@ -23,10 +23,8 @@ static const char * const __kvm_events_tp[] = {
 static void event_get_key(struct perf_sample *sample,
 			  struct event_key *key)
 {
-	int xlen = 64; // TODO: 32-bit support.
-
 	key->info = 0;
-	key->key = perf_sample__intval(sample, kvm_exit_reason(EM_RISCV)) & ~CAUSE_IRQ_FLAG(xlen);
+	key->key = perf_sample__intval(sample, kvm_exit_reason(EM_RISCV));
 	key->exit_reasons = riscv_exit_reasons;
 }
 
