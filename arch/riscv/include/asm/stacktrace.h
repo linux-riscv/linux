@@ -22,8 +22,12 @@ static inline bool on_thread_stack(void)
 }
 
 
-#ifdef CONFIG_VMAP_STACK
+/*
+ * Declare unconditionally so that arch/riscv/kernel/stacktrace.c can use
+ * IS_ENABLED(CONFIG_VMAP_STACK) rather than #ifdef, in line with the kernel
+ * coding style. The DEFINE_PER_CPU (memory allocation) remains guarded by
+ * CONFIG_VMAP_STACK in traps.c.
+ */
 DECLARE_PER_CPU(unsigned long [OVERFLOW_STACK_SIZE/sizeof(long)], overflow_stack);
-#endif /* CONFIG_VMAP_STACK */
 
 #endif /* _ASM_RISCV_STACKTRACE_H */
