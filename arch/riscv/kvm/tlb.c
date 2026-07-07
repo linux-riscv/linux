@@ -325,14 +325,11 @@ void kvm_riscv_hfence_process(struct kvm_vcpu *vcpu)
 	}
 }
 
-static void make_xfence_request(struct kvm *kvm,
-				unsigned long hbase, unsigned long hmask,
-				unsigned int req, unsigned int fallback_req,
-				const struct kvm_riscv_hfence *data)
+static void make_xfence_request_nodata(struct kvm *kvm, unsigned long hbase,
+				       unsigned long hmask, unsigned int req)
 {
 	unsigned long i;
 	struct kvm_vcpu *vcpu;
-	unsigned int actual_req = req;
 	DECLARE_BITMAP(vcpu_mask, KVM_MAX_VCPUS);
 
 	bitmap_zero(vcpu_mask, KVM_MAX_VCPUS);
@@ -346,9 +343,35 @@ static void make_xfence_request(struct kvm *kvm,
 		}
 
 		bitmap_set(vcpu_mask, i, 1);
+	}
 
-		if (!data || !data->type)
-			continue;
+	kvm_make_vcpus_request_mask(kvm, req, vcpu_mask);
+}
+
+static void make_xfence_request(struct kvm *kvm,
+				unsigned long hbase, unsigned long hmask,
+				unsigned int req, unsigned int fallback_req,
+				const struct kvm_riscv_hfence *data)
+{
+	unsigned long i;
+	struct kvm_vcpu *vcpu;
+	unsigned int actual_req = req;
+	DECLARE_BITMAP(vcpu_mask, KVM_MAX_VCPUS);
+
+	if (!data || !data->type)
+		return;
+
+	bitmap_zero(vcpu_mask, KVM_MAX_VCPUS);
+	kvm_for_each_vcpu(i, vcpu, kvm) {
+		if (hbase != -1UL) {
+			if (vcpu->vcpu_id < hbase ||
+				vcpu->vcpu_id >= hbase + BITS_PER_LONG)
+				continue;
+			if (!(hmask & (1UL << (vcpu->vcpu_id - hbase))))
+				continue;
+		}
+
+		bitmap_set(vcpu_mask, i, 1);
 
 		/*
 		 * Enqueue hfence data to VCPU hfence queue. If we don't
@@ -365,8 +388,7 @@ static void make_xfence_request(struct kvm *kvm,
 void kvm_riscv_fence_i(struct kvm *kvm,
 		       unsigned long hbase, unsigned long hmask)
 {
-	make_xfence_request(kvm, hbase, hmask, KVM_REQ_FENCE_I,
-			    KVM_REQ_FENCE_I, NULL);
+	make_xfence_request_nodata(kvm, hbase, hmask, KVM_REQ_FENCE_I);
 }
 
 void kvm_riscv_hfence_gvma_vmid_gpa(struct kvm *kvm,
