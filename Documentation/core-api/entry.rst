@@ -68,15 +68,19 @@ invoked from low-level assembly code looks like this:
   noinstr void syscall(struct pt_regs *regs, int nr)
   {
 	arch_syscall_enter(regs);
-	nr = syscall_enter_from_user_mode_randomize_stack(regs, nr);
-
-	instrumentation_begin();
-	if (!invoke_syscall(regs, nr) && nr != -1)
-	 	result_reg(regs) = __sys_ni_syscall(regs);
-	instrumentation_end();
-
+	result_reg(regs) = -ENOSYS;
+	if (syscall_enter_from_user_mode_randomize_stack(regs, &nr)) {
+		instrumentation_begin();
+		if (!invoke_syscall(regs, nr))
+			result_reg(regs) = __sys_ni_syscall(regs);
+		instrumentation_end();
+	}
 	syscall_exit_to_user_mode(regs);
   }
+
+It is required that either the low level assembly code or the syscall
+function sets the result register to -ENOSYS before invoking the generic
+code.
 
 syscall_enter_from_user_mode_randomize_stack() first invokes
 enter_from_user_mode_randomize_stack() which establishes state in the

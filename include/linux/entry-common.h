@@ -71,7 +71,7 @@ static inline void syscall_enter_audit(struct pt_regs *regs, long syscall)
 	}
 }
 
-static __always_inline bool syscall_trace_enter(struct pt_regs *regs, unsigned long work,
+static __always_inline long syscall_trace_enter(struct pt_regs *regs, unsigned long work,
 						long *syscall)
 {
 	/*
@@ -141,16 +141,14 @@ static __always_inline bool syscall_trace_enter(struct pt_regs *regs, unsigned l
  *     ptrace_report_syscall_permit_entry(), __seccomp_permit_syscall(), trace_sys_enter()
  *  2) Invocation of audit_syscall_entry()
  */
-static __always_inline long syscall_enter_from_user_mode_work(struct pt_regs *regs, long syscall)
+static __always_inline bool syscall_enter_from_user_mode_work(struct pt_regs *regs, long *syscall)
 {
 	unsigned long work = READ_ONCE(current_thread_info()->syscall_work);
 
-	if (work & SYSCALL_WORK_ENTER) {
-		if (!syscall_trace_enter(regs, work, &syscall))
-			return -1L;
-	}
+	if (unlikely(work & SYSCALL_WORK_ENTER))
+		return syscall_trace_enter(regs, work, syscall);
 
-	return syscall;
+	return true;
 }
 
 /**
