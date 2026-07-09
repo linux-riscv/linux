@@ -31,7 +31,8 @@ cmh-y := \
 	cmh_ccp_poly.o \
 	cmh_rng.o \
 	cmh_pke_common.o \
-	cmh_pke_rsa.o
+	cmh_pke_rsa.o \
+	cmh_pke_ecdsa.o
 
 # Management ioctl device (/dev/cmh_mgmt): key lifecycle, PKE, PQC ioctls.
 cmh-$(CONFIG_CRYPTO_DEV_CMH_MGMT) += \
