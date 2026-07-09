@@ -292,6 +292,11 @@ static int cmh_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_pke_ecdsa_register;
 
+	/* Register PKE ECDH/X25519 kpp */
+	ret = cmh_pke_ecdh_register();
+	if (ret)
+		goto err_pke_ecdh_register;
+
 	/* Register key management device (/dev/cmh_mgmt) */
 	ret = cmh_mgmt_register();
 	if (ret)
@@ -304,6 +309,8 @@ static int cmh_probe(struct platform_device *pdev)
 	return 0;
 
 err_mgmt_register:
+	cmh_pke_ecdh_unregister();
+err_pke_ecdh_register:
 	cmh_pke_ecdsa_unregister();
 err_pke_ecdsa_register:
 	cmh_pke_rsa_unregister();
@@ -364,6 +371,7 @@ static void cmh_remove(struct platform_device *pdev)
 	cfg = &dev->config;
 
 	cmh_mgmt_unregister();
+	cmh_pke_ecdh_unregister();
 	cmh_pke_ecdsa_unregister();
 	cmh_pke_rsa_unregister();
 	cmh_ccp_poly_unregister();
