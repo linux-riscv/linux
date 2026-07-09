@@ -1,0 +1,66 @@
+What:		/sys/devices/platform/<dev>/fw_version
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		Reports the CryptoManager Hub embedded software (eSW) firmware
+		version as a 32-bit hexadecimal value read from the SIC
+		SW_VERSION register.
+
+		Example: "0x00010002"
+
+		Read-only.
+
+What:		/sys/devices/platform/<dev>/hw_version
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		Reports the CryptoManager Hub hardware version as a 32-bit
+		hexadecimal value read from the SIC HW_VERSION0 register.
+
+		Example: "0x00000000"
+
+		Read-only.
+
+What:		/sys/devices/platform/<dev>/boot_status
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		Reports the CryptoManager Hub boot status register as a 32-bit
+		hexadecimal value.  This reflects the firmware boot
+		progress and final state:
+
+		  0x00000066 - firmware booted (post-self-test)
+		  other      - firmware boot in progress or failed
+
+		Read-only.
+
+What:		/sys/devices/platform/<dev>/mbx_available
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		Reports the mailbox availability bitmap as a 32-bit
+		hexadecimal value read from the SIC MBX_AVAILABILITY
+		register.  Each set bit indicates a hardware mailbox
+		instance that the firmware has made available.
+
+		Example: "0x00000003" (mailboxes 0 and 1 available)
+
+		Read-only.
+
+What:		/sys/devices/platform/<dev>/mbx_count
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		Reports the number of mailboxes the driver has configured,
+		as a decimal integer.  This reflects the driver's active
+		configuration (from DT properties or module parameters),
+		which may be fewer than illustrated by mbx_available.
+
+		Example: "2"
+
+		Read-only.

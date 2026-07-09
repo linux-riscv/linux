@@ -1,0 +1,46 @@
+# SPDX-License-Identifier: GPL-2.0
+#
+# CRI CryptoManager Hub (CMH) hardware crypto accelerator
+#
+
+config CRYPTO_DEV_CMH
+	tristate "CRI CryptoManager Hub (CMH) hardware crypto accelerator"
+	depends on CRYPTO && OF && HAS_IOMEM && (64BIT || COMPILE_TEST)
+	select CRYPTO_HASH
+	select CRYPTO_SKCIPHER
+	select CRYPTO_AEAD
+	select CRYPTO_AKCIPHER
+	select CRYPTO_SIG
+	select CRYPTO_KPP
+	select CRYPTO_ECC
+	select CRYPTO_RSA
+	select CRYPTO_AES
+	select CRYPTO_CCM
+	select CRYPTO_SM4_GENERIC
+	select HW_RANDOM
+	help
+	  Driver for the CRI CryptoManager Hub (CMH) hardware crypto accelerator.
+	  Accesses the hardware via a mailbox-based VCQ (Virtual Command
+	  Queue) interface and registers algorithms with the kernel
+	  crypto subsystem.
+
+	  Supported algorithm families: AES (ECB/CBC/CTR/XTS/CFB),
+	  SM4 (ECB/CBC/CTR/XTS/CFB), ChaCha20-Poly1305, AES-GCM, AES-CCM,
+	  SHA-2, SHA-3, SHAKE, CSHAKE, KMAC, SM3, HMAC, AES-CMAC,
+	  SM4-CMAC, SM4-XCBC, RSA, ECDSA, ECDH, SM2, and DRBG (hwrng).
+	  Ioctl-only algorithms: EdDSA, ML-KEM.
+
+	  To compile this driver as a module, choose M here.
+
+config CRYPTO_DEV_CMH_DEBUG
+	bool "CMH debug instrumentation (debugfs counters)"
+	depends on CRYPTO_DEV_CMH && DEBUG_FS
+	help
+	  Enable per-mailbox debugfs counters under
+	  /sys/kernel/debug/cmh/ for the CMH driver.
+	  Exposes VCQ submit/complete/error counts, queue depth
+	  high-water marks, and transaction manager backoff statistics.
+
+	  Useful for bringup, validation, and performance analysis.
+	  Not recommended for production.
+

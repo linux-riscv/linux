@@ -1,0 +1,155 @@
+What:		/sys/kernel/debug/cmh/mbx<N>/vcqs_submitted
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RO) Total number of VCQ command entries submitted to
+		mailbox N since the driver was loaded.
+
+What:		/sys/kernel/debug/cmh/mbx<N>/vcqs_completed
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RO) Total number of VCQ command completions received
+		from mailbox N.
+
+What:		/sys/kernel/debug/cmh/mbx<N>/vcqs_errors
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RO) Total number of error completions received from
+		mailbox N.
+
+What:		/sys/kernel/debug/cmh/mbx<N>/queue_full_count
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RO) Number of times the transaction manager skipped
+		mailbox N because its in-flight queue was full.
+
+What:		/sys/kernel/debug/cmh/mbx<N>/max_queue_depth
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RO) High-water mark of in-flight transactions on
+		mailbox N.
+
+What:		/sys/kernel/debug/cmh/mbx<N>/inject_abort
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(WO) Write any value to inject an MBX_COMMAND_ABORT on
+		mailbox N.  The abort triggers error-IRQ handling that
+		completes all in-flight transactions with -EIO and then
+		issues MBX_COMMAND_RESTART to resume the mailbox.
+		Only available when CONFIG_CRYPTO_DEV_CMH_DEBUG is enabled.
+
+What:		/sys/kernel/debug/cmh/mbx<N>/force_drain
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(WO) Write any value to unconditionally FLUSH and drain
+		all pending transactions on mailbox N, completing each
+		with -ECANCELED, and reset all recovery bookkeeping
+		(including the wedged flag).  The mailbox is re-enabled
+		for new work immediately; no hardware health verification
+		is performed.  Use as a last-resort recovery when the eSW
+		is unresponsive and normal ABORT/RESTART escalation has
+		not recovered the mailbox.
+		Only available when CONFIG_CRYPTO_DEV_CMH_DEBUG is enabled.
+
+What:		/sys/kernel/debug/cmh/tm/cmq_posts
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RO) Total number of cmh_tm_post_command() calls (one
+		per crypto request submitted to the transaction manager).
+
+What:		/sys/kernel/debug/cmh/tm/cmq_depth_max
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RO) High-water mark of the command queue length.
+
+What:		/sys/kernel/debug/cmh/tm/cmq_eagain_count
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RO) Number of times the command queue was full and
+		returned -EAGAIN to the caller.
+
+What:		/sys/kernel/debug/cmh/tm/backoff_count
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RO) Number of times the transaction manager backed off
+		because all mailbox queues were full.
+
+What:		/sys/kernel/debug/cmh/tm/async_timeout_count
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RO) Number of async crypto requests that timed out
+		waiting for hardware completion.
+
+What:		/sys/kernel/debug/cmh/config/async_timeout_ms
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RW) Async request timeout in milliseconds.  On timeout
+		the driver issues MBX_COMMAND_ABORT; if the eSW is
+		unresponsive, the watchdog escalates through RESTART,
+		FLUSH, and force-drain to bound D-state duration.
+
+What:		/sys/kernel/debug/cmh/config/vcq_timeout_ms
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RW) VCQ command timeout in milliseconds.
+
+What:		/sys/kernel/debug/cmh/config/slow_op_timeout_ms
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RW) Slow-operation timeout in milliseconds.  Used for
+		operations known to take longer (e.g. RSA key generation,
+		PQC key generation).
+
+What:		/sys/kernel/debug/cmh/config/drain_timeout_ms
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RW) Drain timeout in milliseconds.  Maximum time to wait
+		for all in-flight transactions to complete during driver
+		removal or suspend.
+
+What:		/sys/kernel/debug/cmh/config/watchdog_ms
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RW) Result-handler watchdog interval in milliseconds.
+		Detects missed IRQs, stuck mailboxes, and abort-stall
+		conditions.  Clamped to a 10 ms minimum.
+
+What:		/sys/kernel/debug/cmh/config/drbg_timeout_ms
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		(RW) DRBG self-seed timeout in milliseconds.

@@ -6,4 +6,5 @@ Hardware Device Driver Specific Documentation
 .. toctree::
    :maxdepth: 1
 
+   cmh
    octeontx2
