@@ -36,6 +36,7 @@
 #include "cmh_sm3.h"
 #include "cmh_aes.h"
 #include "cmh_sm4.h"
+#include "cmh_ccp.h"
 #include "cmh_mgmt.h"
 #include "cmh_registers.h"
 #include "cmh_debugfs.h"
@@ -259,6 +260,21 @@ static int cmh_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_sm4_cmac_register;
 
+	/* Register CCP ChaCha20 skcipher algorithm */
+	ret = cmh_ccp_register();
+	if (ret)
+		goto err_ccp_register;
+
+	/* Register CCP ChaCha20-Poly1305 AEAD (RFC 7539) */
+	ret = cmh_ccp_aead_register();
+	if (ret)
+		goto err_ccp_aead_register;
+
+	/* Register CCP Poly1305 shash algorithm */
+	ret = cmh_ccp_poly_register();
+	if (ret)
+		goto err_ccp_poly_register;
+
 	/* Register key management device (/dev/cmh_mgmt) */
 	ret = cmh_mgmt_register();
 	if (ret)
@@ -271,6 +287,12 @@ static int cmh_probe(struct platform_device *pdev)
 	return 0;
 
 err_mgmt_register:
+	cmh_ccp_poly_unregister();
+err_ccp_poly_register:
+	cmh_ccp_aead_unregister();
+err_ccp_aead_register:
+	cmh_ccp_unregister();
+err_ccp_register:
 	cmh_sm4_cmac_unregister();
 err_sm4_cmac_register:
 	cmh_sm4_aead_unregister();
@@ -319,6 +341,9 @@ static void cmh_remove(struct platform_device *pdev)
 	cfg = &dev->config;
 
 	cmh_mgmt_unregister();
+	cmh_ccp_poly_unregister();
+	cmh_ccp_aead_unregister();
+	cmh_ccp_unregister();
 	cmh_sm4_cmac_unregister();
 	cmh_sm4_aead_unregister();
 	cmh_sm4_unregister();
