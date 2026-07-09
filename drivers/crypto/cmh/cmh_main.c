@@ -35,6 +35,7 @@
 #include "cmh_kmac.h"
 #include "cmh_sm3.h"
 #include "cmh_aes.h"
+#include "cmh_sm4.h"
 #include "cmh_mgmt.h"
 #include "cmh_registers.h"
 #include "cmh_debugfs.h"
@@ -243,6 +244,21 @@ static int cmh_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_aes_cmac_register;
 
+	/* Register SM4 skcipher algorithms */
+	ret = cmh_sm4_register();
+	if (ret)
+		goto err_sm4_register;
+
+	/* Register SM4 AEAD algorithms (GCM, CCM) */
+	ret = cmh_sm4_aead_register();
+	if (ret)
+		goto err_sm4_aead_register;
+
+	/* Register SM4 CMAC/XCBC algorithms */
+	ret = cmh_sm4_cmac_register();
+	if (ret)
+		goto err_sm4_cmac_register;
+
 	/* Register key management device (/dev/cmh_mgmt) */
 	ret = cmh_mgmt_register();
 	if (ret)
@@ -255,6 +271,12 @@ static int cmh_probe(struct platform_device *pdev)
 	return 0;
 
 err_mgmt_register:
+	cmh_sm4_cmac_unregister();
+err_sm4_cmac_register:
+	cmh_sm4_aead_unregister();
+err_sm4_aead_register:
+	cmh_sm4_unregister();
+err_sm4_register:
 	cmh_aes_cmac_unregister();
 err_aes_cmac_register:
 	cmh_aes_aead_unregister();
@@ -297,6 +319,9 @@ static void cmh_remove(struct platform_device *pdev)
 	cfg = &dev->config;
 
 	cmh_mgmt_unregister();
+	cmh_sm4_cmac_unregister();
+	cmh_sm4_aead_unregister();
+	cmh_sm4_unregister();
 	cmh_aes_cmac_unregister();
 	cmh_aes_aead_unregister();
 	cmh_aes_unregister();
