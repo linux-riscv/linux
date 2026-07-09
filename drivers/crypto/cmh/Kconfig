@@ -44,3 +44,22 @@ config CRYPTO_DEV_CMH_DEBUG
 	  Useful for bringup, validation, and performance analysis.
 	  Not recommended for production.
 
+
+config CRYPTO_DEV_CMH_MGMT
+	bool "CMH management ioctl device (/dev/cmh_mgmt)"
+	depends on CRYPTO_DEV_CMH
+	default n
+	help
+	  Expose /dev/cmh_mgmt, a misc device providing ioctl commands
+	  for operations that have no kernel crypto API binding: hardware
+	  key lifecycle (create, import, derive, destroy), KIC key
+	  derivation, PQC keygen/encaps/decaps (ML-KEM, ML-DSA, SLH-DSA),
+	  EdDSA sign/verify, SM2 key exchange, and DRBG
+	  configuration.
+
+	  The device requires CAP_SYS_ADMIN.  Disabling this option
+	  removes the ioctl interface but all kernel crypto API
+	  algorithms (consumed by in-kernel users and validated by the
+	  crypto test manager) remain fully functional.
+
+	  If unsure, say N.

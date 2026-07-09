@@ -29,6 +29,7 @@
 #include "cmh_mqi.h"
 #include "cmh_txn.h"
 #include "cmh_rh.h"
+#include "cmh_mgmt.h"
 #include "cmh_registers.h"
 #include "cmh_debugfs.h"
 #include "cmh_sysfs.h"
@@ -196,12 +197,19 @@ static int cmh_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_rh_init;
 
+	/* Register key management device (/dev/cmh_mgmt) */
+	ret = cmh_mgmt_register();
+	if (ret)
+		goto err_mgmt_register;
+
 	g_cmh_dev = dev;
 	platform_set_drvdata(pdev, dev);
 
 	dev_info(cmh_dev(), "initialized successfully\n");
 	return 0;
 
+err_mgmt_register:
+	cmh_rh_cleanup(cfg);
 err_rh_init:
 	cmh_tm_cleanup();
 err_tm_init:
@@ -226,6 +234,7 @@ static void cmh_remove(struct platform_device *pdev)
 
 	cfg = &dev->config;
 
+	cmh_mgmt_unregister();
 	cmh_rh_cleanup(cfg);
 	cmh_tm_cleanup();
 	cmh_mqi_cleanup(cfg);

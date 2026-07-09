@@ -12,7 +12,16 @@ cmh-y := \
 	cmh_txn.o \
 	cmh_rh.o \
 	cmh_dma.o \
-	cmh_sysfs.o
+	cmh_sysfs.o \
+	cmh_key.o \
+	cmh_sys.o
+
+# Management ioctl device (/dev/cmh_mgmt): key lifecycle, PKE, PQC ioctls.
+cmh-$(CONFIG_CRYPTO_DEV_CMH_MGMT) += \
+	cmh_mgmt.o \
+	cmh_mgmt_pke.o \
+	cmh_mgmt_pqc.o \
+	cmh_pke_sm2.o
 
 ccflags-y += -I$(src)/include
 

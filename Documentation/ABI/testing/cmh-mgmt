@@ -1,0 +1,136 @@
+What:		/dev/cmh_mgmt
+Date:		June 2026
+KernelVersion:	7.1
+Contact:	linux-crypto@vger.kernel.org
+Description:
+		Character device (misc) providing a management and
+		key-operations ioctl interface to the CRI CryptoManager Hub
+		hardware crypto accelerator.  Used for operations that
+		cannot be represented through the standard in-kernel
+		crypto API: datastore key CRUD, key derivation,
+		asymmetric crypto (EdDSA, SM2), and post-quantum crypto
+		(ML-KEM, ML-DSA, SLH-DSA).
+
+		The ioctl magic is 'J'.  All struct arguments are
+		versioned via a leading __u32 version field set to
+		CMH_MGMT_V1 (1).
+
+		Ioctl commands are grouped by function:
+
+		**Key Management (0x01-0x0E):**
+
+		- CMH_IOCTL_KEY_NEW (0x01): Allocate a new datastore slot.
+		  Accepts ds_type (CMH_DS_* constant), key length, flags,
+		  and caller ID.  Returns a 64-bit key reference.
+
+		- CMH_IOCTL_KEY_WRITE (0x02): Write key material into
+		  a previously allocated datastore slot.  Supports
+		  plaintext or wrapped key import via a wrapping key ref.
+
+		- CMH_IOCTL_KEY_READ (0x03): Read key material from
+		  a datastore slot, optionally wrapped.  Returns data
+		  plus a 16-byte SYS header for wrapped reads.
+
+		- CMH_IOCTL_KEY_FIND (0x04): Look up a key reference
+		  by caller ID (CID).
+
+		- CMH_IOCTL_KEY_GRANT (0x05): Grant access to a key.
+
+		- CMH_IOCTL_KEY_DELETE (0x06): Delete a datastore slot.
+
+		- CMH_IOCTL_DS_EXPORT (0x07): Export the entire datastore
+		  as an encrypted blob.
+
+		- CMH_IOCTL_DS_IMPORT (0x08): Import a previously exported
+		  datastore blob.
+
+		- CMH_IOCTL_KEY_NEW_RANDOM (0x0B): Allocate a datastore
+		  slot and fill it with hardware-generated random data.
+
+		- CMH_IOCTL_KEY_LIST (0x0E): List active datastore entries,
+		  returning CIDs, types, lengths, and flags.
+
+		**Key Derivation -- KIC (0x09-0x0D):**
+
+		- CMH_IOCTL_KIC_HKDF1 (0x09): HKDF-Extract step.
+		- CMH_IOCTL_KIC_HKDF2 (0x0A): HKDF-Expand step.
+		- CMH_IOCTL_KIC_AES_CMAC_KDF (0x0C): AES-CMAC KDF.
+		- CMH_IOCTL_KIC_DKEK_DERIVE (0x0D): DKEK derivation.
+
+		**EAC -- Error and Alarm (0x0F):**
+
+		- CMH_IOCTL_EAC_READ (0x0F): Read and clear hardware
+		  error, alarm, and safety notification registers.
+
+		**PKE -- Public Key Engine (0x10-0x1C):**
+
+		- CMH_IOCTL_PKE_RSA_ENC (0x10): RSA public-key encrypt.
+		- CMH_IOCTL_PKE_RSA_DEC (0x11): RSA private-key decrypt.
+		- CMH_IOCTL_PKE_RSA_CRT_DEC (0x12): RSA-CRT decrypt.
+		- CMH_IOCTL_PKE_RSA_KEYGEN (0x13): RSA key pair generation.
+		- CMH_IOCTL_PKE_ECDSA_SIGN (0x14): ECDSA sign.
+		- CMH_IOCTL_PKE_ECDH (0x16): ECDH shared secret.
+		- CMH_IOCTL_PKE_ECDH_KEYGEN (0x17): ECDH key pair generation.
+		- CMH_IOCTL_PKE_EDDSA_SIGN (0x18): EdDSA sign (Ed25519/Ed448).
+		- CMH_IOCTL_PKE_EDDSA_VERIFY (0x19): EdDSA verify.
+		- CMH_IOCTL_PKE_EC_KEYGEN (0x1A): EC key pair generation.
+		- CMH_IOCTL_PKE_EC_PUBGEN (0x1B): EC public key derivation.
+		- CMH_IOCTL_PKE_EDDSA_KEYGEN_SCA (0x1C): EdDSA SCA-protected
+		  key generation.
+
+		**PQC -- Post-Quantum Crypto (0x20-0x2D):**
+
+		- CMH_IOCTL_ML_KEM_KEYGEN (0x20): ML-KEM key pair generation
+		  (modes 512/768/1024).
+		- CMH_IOCTL_ML_KEM_ENC (0x21): ML-KEM encapsulation.
+		- CMH_IOCTL_ML_KEM_DEC (0x22): ML-KEM decapsulation.
+		- CMH_IOCTL_ML_DSA_KEYGEN (0x23): ML-DSA key pair generation
+		  (modes 44/65/87).
+		- CMH_IOCTL_ML_DSA_SIGN (0x24): ML-DSA sign.
+		- CMH_IOCTL_SLHDSA_KEYGEN (0x28): SLH-DSA key pair generation
+		  (12 parameter sets).
+		- CMH_IOCTL_SLHDSA_SIGN (0x29): SLH-DSA sign.
+		- CMH_IOCTL_SLHDSA_SIGN_PREHASH (0x2D): SLH-DSA prehash sign.
+
+		**SM2 Operations (0x30-0x37):**
+
+		- CMH_IOCTL_SM2_ECDH_KEYGEN (0x30): SM2 ephemeral key gen.
+		- CMH_IOCTL_SM2_ECDH (0x31): SM2 key exchange.
+		- CMH_IOCTL_SM2_DEC_POINT (0x32): SM2 decrypt (point step).
+		- CMH_IOCTL_SM2_ENC_POINT (0x33): SM2 encrypt (point step).
+		- CMH_IOCTL_SM2_ID_DIGEST (0x34): SM2 ID digest (ZA).
+		- CMH_IOCTL_SM2_ECDH_HASH (0x35): SM2 key exchange hash step.
+		- CMH_IOCTL_SM2_DEC_HASH (0x36): SM2 decrypt (hash step).
+		- CMH_IOCTL_SM2_ENC_HASH (0x37): SM2 encrypt (hash step).
+
+		The SM2 encrypt/decrypt hash-step ioctls accept payloads
+		of at most 32 bytes.  The underlying hardware KDF emits a
+		single 32-byte SM3 block, so longer messages cannot be
+		processed in a single command and are rejected with
+		-EINVAL.
+
+		**DRBG Management (0x40):**
+
+		- CMH_IOCTL_DRBG_CONFIG (0x40): Configure the hardware
+		  DRBG entropy ratio and security strength.  Normally
+		  called once at system start-up before hwrng reads.
+
+		All structs contain ``__reserved`` fields that must be
+		zero; the driver returns ``-EINVAL`` if any reserved field
+		is non-zero.  This ensures forward compatibility when
+		reserved fields gain meaning in future versions.
+
+		All ioctls return 0 on success or a negative errno on
+		failure.  Common errors:
+
+		- EINVAL:  Invalid version, parameter, key type, or
+		  non-zero reserved field.
+		- ENOENT:  Key reference not found in datastore.
+		- ENOMEM:  DMA allocation failure.
+		- EBUSY:   Hardware mailbox full.
+		- ETIMEDOUT: VCQ operation timed out.
+		- EFAULT:  Bad user-space pointer.
+
+		The ioctl UAPI header is <linux/cmh_mgmt_ioctl.h>.
+		All structures, constants, and type definitions are
+		documented in that header file.
