@@ -1,0 +1,222 @@
+# SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/crypto/cri,cmh.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: CRI CryptoManager Hub (CMH) Hardware Crypto Accelerator
+
+maintainers:
+  - Alex Ousherovitch <aousherovitch@rambus.com>
+  - Saravanakrishnan Krishnamoorthy <skrishnamoorthy@rambus.com>
+  - Joel Wittenauer <Joel.Wittenauer@cryptography.com>
+
+description: |
+  The CRI CryptoManager Hub (CMH) is a hardware cryptographic accelerator accessed
+  via a mailbox-based VCQ (Virtual Command Queue) interface.  The host
+  writes VCQ command sequences into per-mailbox DMA queue buffers and
+  rings a doorbell; the CMH eSW processes them and signals completion
+  via interrupt.
+
+  Supported algorithm families: SHA-2, SHA-3, SM3, AES, SM4,
+  ChaCha20-Poly1305, RSA, ECDSA, EdDSA, ECDH, SM2, ML-KEM, ML-DSA,
+  SLH-DSA, LMS, XMSS, DRBG.
+
+properties:
+  compatible:
+    const: cri,cmh
+
+  reg:
+    maxItems: 1
+    description:
+      SIC (System Interface Controller) MMIO region.  Mailbox instance
+      registers are at offsets N * 0x1000 within this region.
+
+  interrupts:
+    minItems: 1
+    maxItems: 64
+    description:
+      Per-mailbox completion/error interrupts from the CryptoManager Hub,
+      matching the real CMH ch_sys_interrupt_mbx[N-1:0] topology.
+      Entry i corresponds to MBX instance i.  The driver maps each
+      configured mailbox (cri,mbx-instances) to its DT interrupt
+      index and registers a separate threaded IRQ handler per MBX.
+
+  interrupt-names:
+    minItems: 1
+    maxItems: 64
+    items:
+      pattern: '^mbx[0-9]+$'
+    description:
+      Names for each mailbox interrupt, matching the interrupts array.
+      Format is "mbxN" where N is the mailbox instance index.
+
+  cri,mbx-instances:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 64
+    description:
+      Array of 0-based mailbox instance indices to configure.
+      Each index N maps to register offset N * 0x1000 within the
+      SIC region.  If absent, defaults to instances 0 and 1.
+
+  cri,mbx-slots-log2:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 64
+    description:
+      Per-mailbox slot count as log2.  Valid range 1..15.
+      Array length must match cri,mbx-instances.
+      Default is 5 (32 slots).
+
+  cri,mbx-strides-log2:
+    $ref: /schemas/types.yaml#/definitions/uint32-array
+    minItems: 1
+    maxItems: 64
+    description:
+      Per-mailbox stride (bytes per slot) as log2.  Valid range 7..10.
+      Array length must match cri,mbx-instances.
+      Default is 7 (128 bytes per slot).
+
+  "#address-cells":
+    const: 1
+
+  "#size-cells":
+    const: 0
+
+patternProperties:
+  "^(hc|aes|sm4|sm3|hcq|qse|pke|drbg|ccp)@[0-9a-f]+$":
+    type: object
+    description:
+      Per-core-type child nodes.  Each child represents one crypto core
+      instance available in the hardware.  The driver enumerates these at
+      probe to discover which algorithm families are present.
+
+    properties:
+      reg:
+        maxItems: 1
+        description:
+          Hardware core ID for this core type (e.g. 0x02 for HC, 0x03 for AES).
+          Must match the CORE_ID_* values defined by the CMH hardware.
+
+      cri,mbx:
+        $ref: /schemas/types.yaml#/definitions/uint32
+        description:
+          Pin this core instance to a specific mailbox instance index.
+          Multiple child nodes of the same core type may each specify a
+          different cri,mbx value to spread instances across mailboxes.
+          When absent, the driver auto-assigns a mailbox via round-robin
+          across the instances listed in cri,mbx-instances.
+
+    required:
+      - reg
+
+    additionalProperties: false
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - "#address-cells"
+  - "#size-cells"
+
+additionalProperties: false
+
+examples:
+  - |
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        crypto@a4800000 {
+            compatible = "cri,cmh";
+            reg = <0x0 0xa4800000 0x0 0x41000>;
+            interrupts = <1 2>;
+            interrupt-names = "mbx0", "mbx1";
+            cri,mbx-instances = <0 1>;
+            cri,mbx-slots-log2 = <5 5>;
+            cri,mbx-strides-log2 = <7 7>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            hc@2 {
+                reg = <0x02>;
+            };
+
+            aes@3 {
+                reg = <0x03>;
+            };
+
+            sm4@4 {
+                reg = <0x04>;
+            };
+
+            sm3@5 {
+                reg = <0x05>;
+            };
+
+            hcq@8 {
+                reg = <0x08>;
+            };
+
+            qse@9 {
+                reg = <0x09>;
+            };
+
+            pke@a {
+                reg = <0x0a>;
+                cri,mbx = <1>;
+            };
+
+            drbg@f {
+                reg = <0x0f>;
+            };
+
+            ccp@18 {
+                reg = <0x18>;
+            };
+        };
+    };
+
+  - |
+    /* Multi-instance: two AES cores on separate MBXes (future eSW support) */
+    soc {
+        #address-cells = <2>;
+        #size-cells = <2>;
+
+        crypto@a4800000 {
+            compatible = "cri,cmh";
+            reg = <0x0 0xa4800000 0x0 0x41000>;
+            interrupts = <1 2>;
+            interrupt-names = "mbx0", "mbx1";
+            cri,mbx-instances = <0 1>;
+            cri,mbx-slots-log2 = <5 5>;
+            cri,mbx-strides-log2 = <7 7>;
+            #address-cells = <1>;
+            #size-cells = <0>;
+
+            hc@2 {
+                reg = <0x02>;
+            };
+
+            aes@3 {
+                reg = <0x03>;
+                cri,mbx = <0>;
+            };
+
+            /* Second AES instance at core ID 0x06, pinned to MBX 1 */
+            aes@6 {
+                reg = <0x06>;
+                cri,mbx = <1>;
+            };
+
+            pke@a {
+                reg = <0x0a>;
+                cri,mbx = <1>;
+            };
+
+            drbg@f {
+                reg = <0x0f>;
+            };
+        };
+    };

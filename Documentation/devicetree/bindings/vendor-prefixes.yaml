@@ -375,6 +375,8 @@ patternProperties:
     description: Crane Connectivity Solutions
   "^creative,.*":
     description: Creative Technology Ltd
+  "^cri,.*":
+    description: Cryptography Research, Inc.
   "^crystalfontz,.*":
     description: Crystalfontz America, Inc.
   "^csky,.*":
