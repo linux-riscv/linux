@@ -15,7 +15,8 @@ cmh-y := \
 	cmh_sysfs.o \
 	cmh_key.o \
 	cmh_sys.o \
-	cmh_hash.o
+	cmh_hash.o \
+	cmh_hmac.o
 
 # Management ioctl device (/dev/cmh_mgmt): key lifecycle, PKE, PQC ioctls.
 cmh-$(CONFIG_CRYPTO_DEV_CMH_MGMT) += \
