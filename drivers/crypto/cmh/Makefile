@@ -19,7 +19,10 @@ cmh-y := \
 	cmh_hmac.o \
 	cmh_cshake.o \
 	cmh_kmac.o \
-	cmh_sm3.o
+	cmh_sm3.o \
+	cmh_aes.o \
+	cmh_aes_aead.o \
+	cmh_aes_cmac.o
 
 # Management ioctl device (/dev/cmh_mgmt): key lifecycle, PKE, PQC ioctls.
 cmh-$(CONFIG_CRYPTO_DEV_CMH_MGMT) += \

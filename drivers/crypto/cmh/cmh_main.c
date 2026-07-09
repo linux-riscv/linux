@@ -34,6 +34,7 @@
 #include "cmh_cshake.h"
 #include "cmh_kmac.h"
 #include "cmh_sm3.h"
+#include "cmh_aes.h"
 #include "cmh_mgmt.h"
 #include "cmh_registers.h"
 #include "cmh_debugfs.h"
@@ -227,6 +228,21 @@ static int cmh_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_sm3_register;
 
+	/* Register AES skcipher algorithms */
+	ret = cmh_aes_register();
+	if (ret)
+		goto err_aes_register;
+
+	/* Register AES AEAD algorithms (GCM, CCM) */
+	ret = cmh_aes_aead_register();
+	if (ret)
+		goto err_aes_aead_register;
+
+	/* Register AES CMAC algorithm */
+	ret = cmh_aes_cmac_register();
+	if (ret)
+		goto err_aes_cmac_register;
+
 	/* Register key management device (/dev/cmh_mgmt) */
 	ret = cmh_mgmt_register();
 	if (ret)
@@ -239,6 +255,12 @@ static int cmh_probe(struct platform_device *pdev)
 	return 0;
 
 err_mgmt_register:
+	cmh_aes_cmac_unregister();
+err_aes_cmac_register:
+	cmh_aes_aead_unregister();
+err_aes_aead_register:
+	cmh_aes_unregister();
+err_aes_register:
 	cmh_sm3_unregister();
 err_sm3_register:
 	cmh_kmac_unregister();
@@ -275,6 +297,9 @@ static void cmh_remove(struct platform_device *pdev)
 	cfg = &dev->config;
 
 	cmh_mgmt_unregister();
+	cmh_aes_cmac_unregister();
+	cmh_aes_aead_unregister();
+	cmh_aes_unregister();
 	cmh_sm3_unregister();
 	cmh_kmac_unregister();
 	cmh_cshake_unregister();
