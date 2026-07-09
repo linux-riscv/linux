@@ -34,6 +34,7 @@
 #include "cmh_cshake.h"
 #include "cmh_kmac.h"
 #include "cmh_sm3.h"
+#include "cmh_rng.h"
 #include "cmh_aes.h"
 #include "cmh_sm4.h"
 #include "cmh_ccp.h"
@@ -230,6 +231,11 @@ static int cmh_probe(struct platform_device *pdev)
 	if (ret)
 		goto err_sm3_register;
 
+	/* Register hwrng backed by DRBG core */
+	ret = cmh_rng_register(pdev);
+	if (ret)
+		goto err_rng_register;
+
 	/* Register AES skcipher algorithms */
 	ret = cmh_aes_register();
 	if (ret)
@@ -305,6 +311,8 @@ err_aes_cmac_register:
 err_aes_aead_register:
 	cmh_aes_unregister();
 err_aes_register:
+	cmh_rng_unregister();
+err_rng_register:
 	cmh_sm3_unregister();
 err_sm3_register:
 	cmh_kmac_unregister();
@@ -350,6 +358,7 @@ static void cmh_remove(struct platform_device *pdev)
 	cmh_aes_cmac_unregister();
 	cmh_aes_aead_unregister();
 	cmh_aes_unregister();
+	cmh_rng_unregister();
 	cmh_sm3_unregister();
 	cmh_kmac_unregister();
 	cmh_cshake_unregister();
