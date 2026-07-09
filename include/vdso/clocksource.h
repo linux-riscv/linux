@@ -4,9 +4,12 @@
 
 #include <vdso/limits.h>
 
-#ifdef CONFIG_GENERIC_GETTIMEOFDAY
 #include <asm/vdso/clocksource.h>
-#endif /* CONFIG_GENERIC_GETTIMEOFDAY */
+
+#if !IS_ENABLED(CONFIG_GENERIC_GETTIMEOFDAY) && defined(VDSO_ARCH_CLOCKMODES)
+/* Unlinkable dummy stubs */
+extern int VDSO_ARCH_CLOCKMODES;
+#endif
 
 enum vdso_clock_mode {
 	VDSO_CLOCKMODE_NONE,
