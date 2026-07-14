@@ -171,6 +171,15 @@ void __init setup_smp(void)
 	for (cpuid = 1; cpuid < nr_cpu_ids; cpuid++)
 		if (cpuid_to_hartid_map(cpuid) != INVALID_HARTID)
 			set_cpu_possible(cpuid, true);
+
+	/*
+	 * Boot CPU (cpuid=0) is never set possible by the loop above.
+	 * x86 and arm64 call init_cpu_possible(cpumask_of(0)) explicitly;
+	 * RISC-V was missing this. Without it, rcu_init_one()'s
+	 * for_each_possible_cpu loop skips CPU 0, leaving rdp->mynode=NULL,
+	 * causing rcutree_prepare_cpu() to dereference NULL and hang.
+	 */
+	set_cpu_possible(0, true);
 }
 
 static int start_secondary_cpu(int cpu, struct task_struct *tidle)
