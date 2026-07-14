@@ -92,6 +92,7 @@ static inline unsigned long __attribute__((always_inline)) get_ssp(void)
  * Based on code from nolibc.h. Keep a copy here because this can't pull in all
  * of nolibc.h.
  */
+ #ifndef BUILD_PRCTL
 #define ARCH_PRCTL(arg1, arg2)					\
 ({								\
 	long _ret;						\
@@ -108,6 +109,40 @@ static inline unsigned long __attribute__((always_inline)) get_ssp(void)
 	);							\
 	_ret;							\
 })
+
+#define SHADOW_STACK_DISABLE() ARCH_PRCTL(ARCH_SHSTK_DISABLE, ARCH_SHSTK_SHSTK)
+#define SHADOW_STACK_ENABLE() ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_SHSTK)
+#define SHADOW_STACK_ENABLE_WRITE() ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_WRSS)
+
+#else
+
+#define PRCTL(option, arg2, arg3, arg4, arg5)             \
+({                                                        \
+	long _ret;                                        \
+	register long _num  asm("rax") = __NR_prctl;      \
+	register long _arg1 asm("rdi") = (long)(option);  \
+	register long _arg2 asm("rsi") = (long)(arg2);    \
+	register long _arg3 asm("rdx") = (long)(arg3);    \
+	register long _arg4 asm("r10") = (long)(arg4);    \
+	register long _arg5 asm("r8")  = (long)(arg5);    \
+							  \
+	asm volatile (                                    \
+		"syscall"                                 \
+		: "=a"(_ret)                              \
+		: "0"(_num),                              \
+		  "r"(_arg1), "r"(_arg2), "r"(_arg3),     \
+		  "r"(_arg4), "r"(_arg5)                  \
+		: "rcx", "r11", "memory", "cc"            \
+	);                                                \
+	_ret;                                             \
+})
+
+#define SHADOW_STACK_DISABLE() PRCTL(PR_SET_SHADOW_STACK_STATUS, 0, 0, 0, 0)
+#define SHADOW_STACK_ENABLE() PRCTL(PR_SET_SHADOW_STACK_STATUS, PR_SHADOW_STACK_ENABLE, 0, 0, 0)
+#define SHADOW_STACK_ENABLE_WRITE() \
+	PRCTL(PR_SET_SHADOW_STACK_STATUS, PR_SHADOW_STACK_ENABLE|PR_SHADOW_STACK_WRITE, 0, 0, 0)
+
+#endif
 
 void *create_shstk(void *addr)
 {
@@ -691,7 +726,7 @@ void segv_gp_handler(int signum, siginfo_t *si, void *uc)
 	 * To work with old glibc, this can't rely on siglongjmp working with
 	 * shadow stack enabled, so disable shadow stack before siglongjmp().
 	 */
-	ARCH_PRCTL(ARCH_SHSTK_DISABLE, ARCH_SHSTK_SHSTK);
+	SHADOW_STACK_DISABLE();
 	siglongjmp(jmp_buffer, -1);
 }
 
@@ -854,7 +889,7 @@ static int test_uretprobe(void)
 	if (sigsetjmp(jmp_buffer, 1))
 		goto out;
 
-	ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_SHSTK);
+	SHADOW_STACK_ENABLE();
 
 	/*
 	 * This either segfaults and goes through sigsetjmp above
@@ -866,7 +901,7 @@ static int test_uretprobe(void)
 	err = 0;
 
 out:
-	ARCH_PRCTL(ARCH_SHSTK_DISABLE, ARCH_SHSTK_SHSTK);
+	SHADOW_STACK_DISABLE();
 	signal(SIGSEGV, SIG_DFL);
 	if (fd)
 		close(fd);
@@ -933,7 +968,7 @@ static int test_uprobe_call(void)
 	if (sigsetjmp(jmp_buffer, 1))
 		goto out;
 
-	if (ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_SHSTK))
+	if (SHADOW_STACK_ENABLE())
 		goto out;
 
 	/*
@@ -946,7 +981,7 @@ static int test_uprobe_call(void)
 	err = 0;
 
 out:
-	ARCH_PRCTL(ARCH_SHSTK_DISABLE, ARCH_SHSTK_SHSTK);
+	SHADOW_STACK_DISABLE();
 	signal(SIGSEGV, SIG_DFL);
 	if (fd >= 0)
 		close(fd);
@@ -1059,22 +1094,22 @@ int main(int argc, char *argv[])
 {
 	int ret = 0;
 
-	if (ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_SHSTK)) {
+	if (SHADOW_STACK_ENABLE()) {
 		printf("[SKIP]\tCould not enable Shadow stack\n");
 		return 1;
 	}
 
-	if (ARCH_PRCTL(ARCH_SHSTK_DISABLE, ARCH_SHSTK_SHSTK)) {
+	if (SHADOW_STACK_DISABLE()) {
 		ret = 1;
 		printf("[FAIL]\tDisabling shadow stack failed\n");
 	}
 
-	if (ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_SHSTK)) {
+	if (SHADOW_STACK_ENABLE()) {
 		printf("[SKIP]\tCould not re-enable Shadow stack\n");
 		return 1;
 	}
 
-	if (ARCH_PRCTL(ARCH_SHSTK_ENABLE, ARCH_SHSTK_WRSS)) {
+	if (SHADOW_STACK_ENABLE_WRITE()) {
 		printf("[SKIP]\tCould not enable WRSS\n");
 		ret = 1;
 		goto out;
@@ -1164,7 +1199,7 @@ out:
 	 * Disable shadow stack before the function returns, or there will be a
 	 * shadow stack violation.
 	 */
-	if (ARCH_PRCTL(ARCH_SHSTK_DISABLE, ARCH_SHSTK_SHSTK)) {
+	if (SHADOW_STACK_DISABLE()) {
 		ret = 1;
 		printf("[FAIL]\tDisabling shadow stack failed\n");
 	}
