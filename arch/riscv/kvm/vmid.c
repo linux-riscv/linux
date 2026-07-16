@@ -21,7 +21,7 @@
 static unsigned long vmid_version = 1;
 static unsigned long vmid_next;
 static unsigned long vmid_bits __ro_after_init;
-static DEFINE_SPINLOCK(vmid_lock);
+static DEFINE_RAW_SPINLOCK(vmid_lock);
 
 void __init kvm_riscv_gstage_vmid_detect(void)
 {
@@ -78,14 +78,14 @@ void kvm_riscv_gstage_vmid_update(struct kvm_vcpu *vcpu)
 	if (!kvm_riscv_gstage_vmid_ver_changed(vmid))
 		return;
 
-	spin_lock(&vmid_lock);
+	raw_spin_lock(&vmid_lock);
 
 	/*
 	 * We need to re-check the vmid_version here to ensure that if
 	 * another vcpu already allocated a valid vmid for this vm.
 	 */
 	if (!kvm_riscv_gstage_vmid_ver_changed(vmid)) {
-		spin_unlock(&vmid_lock);
+		raw_spin_unlock(&vmid_lock);
 		return;
 	}
 
@@ -117,7 +117,7 @@ void kvm_riscv_gstage_vmid_update(struct kvm_vcpu *vcpu)
 
 	WRITE_ONCE(vmid->vmid_version, READ_ONCE(vmid_version));
 
-	spin_unlock(&vmid_lock);
+	raw_spin_unlock(&vmid_lock);
 
 	/* Request G-stage page table update for all VCPUs */
 	kvm_for_each_vcpu(i, v, vcpu->kvm)
