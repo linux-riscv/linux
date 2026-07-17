@@ -110,7 +110,7 @@ void kvm_arch_mmu_enable_log_dirty_pt_masked(struct kvm *kvm,
 
 	kvm_riscv_gstage_init(&gstage, kvm);
 
-	flush = kvm_riscv_gstage_wp_range(&gstage, start, end);
+	flush = kvm_riscv_gstage_wp_pt_masked(&gstage, base_gfn, mask);
 	if (flush)
 		kvm_flush_remote_tlbs_range(kvm, start >> PAGE_SHIFT,
 					    (end - start) >> PAGE_SHIFT);
