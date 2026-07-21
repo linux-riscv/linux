@@ -1318,11 +1318,8 @@ static int __seccomp_filter(int this_syscall, const bool recheck_after_trace)
 		 */
 		if (fatal_signal_pending(current))
 			goto skip;
-		/* Check if the tracer forced the syscall to be skipped. */
-		this_syscall = syscall_get_nr(current, current_pt_regs());
-		if (this_syscall < 0)
-			goto skip;
 
+		this_syscall = syscall_get_nr(current, current_pt_regs());
 		/*
 		 * Recheck the syscall, since it may have changed. This
 		 * intentionally uses a NULL struct seccomp_data to force
