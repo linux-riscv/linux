@@ -7,10 +7,12 @@
 #include <uapi/asm/hwprobe.h>
 
 #ifdef CONFIG_RISCV_ISA_VENDOR_EXT_SIFIVE
-void hwprobe_isa_vendor_ext_sifive_0(struct riscv_hwprobe *pair, const struct cpumask *cpus);
+void hwprobe_isa_vendor_ext_sifive_0(struct riscv_hwprobe *pair,
+				     const struct cpumask *cpus, bool test_avail);
 #else
 static inline void hwprobe_isa_vendor_ext_sifive_0(struct riscv_hwprobe *pair,
-						   const struct cpumask *cpus)
+						   const struct cpumask *cpus,
+						   bool test_avail)
 {
 	pair->value = 0;
 }

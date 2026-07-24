@@ -401,3 +401,30 @@ The following keys are defined:
     as defined in version 1.0 of the RISC-V Control-flow Integrity (CFI)
     extensions specification, ratified in commit 302a2d45c243
     ("Update build-pdf.yml") of riscv-cfi.
+
+ * :c:macro:`RISCV_HWPROBE_KEY_EXT_ENABLED`: A modifier key. It reports no
+  value of its own (its value is always 0) and instead changes how the
+  extension-bitmask keys that follow it in the same request are reported.
+  Keys placed before it report the extensions that are present in hardware,
+  as usual. Keys placed after it additionally require each reported extension
+  to be enabled for the calling process, i.e. usable without receiving a
+  SIGILL.
+
+  Currently this applies to Vector. When V has been disabled for the process
+  with ``prctl(PR_RISCV_V_SET_CONTROL, PR_RISCV_V_VSTATE_CTRL_OFF)``,
+  :c:macro:`RISCV_HWPROBE_IMA_V` and the V-dependent sub-extensions are
+  cleared from any :c:macro:`RISCV_HWPROBE_KEY_IMA_EXT_0` that follows the
+  modifier, and :c:macro:`RISCV_HWPROBE_VENDOR_EXT_XTHEADVECTOR` is cleared
+  from any :c:macro:`RISCV_HWPROBE_KEY_VENDOR_EXT_THEAD_0` that follows it,
+  while a preceding key still reports them as present. A single request can
+  therefore return both the hardware-present set and the process-usable
+  set::
+
+      struct riscv_hwprobe pairs[3] = {
+          { .key = RISCV_HWPROBE_KEY_IMA_EXT_0, },   /* present in hardware */
+          { .key = RISCV_HWPROBE_KEY_EXT_ENABLED, }, /* modifier            */
+          { .key = RISCV_HWPROBE_KEY_IMA_EXT_0, },   /* present and enabled */
+      };
+
+  The effect is positional: reordering the pairs changes which keys have the
+  enablement filter applied.

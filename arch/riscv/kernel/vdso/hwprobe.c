@@ -14,7 +14,7 @@ extern int riscv_hwprobe(struct riscv_hwprobe *pairs, size_t pair_count,
 
 static int riscv_vdso_get_values(struct riscv_hwprobe *pairs, size_t pair_count,
 				 size_t cpusetsize, unsigned long *cpus,
-				 unsigned int flags)
+				 unsigned int flags, bool avail_test)
 {
 	const struct vdso_arch_data *avd = &vdso_u_arch_data;
 	bool all_cpus = !cpusetsize && !cpus;
@@ -27,7 +27,8 @@ static int riscv_vdso_get_values(struct riscv_hwprobe *pairs, size_t pair_count,
 	 * homogeneous, then this function can handle requests for arbitrary
 	 * masks.
 	 */
-	if (flags != 0 || (!all_cpus && !avd->homogeneous_cpus) || unlikely(!avd->ready))
+	if (flags != 0 || (!all_cpus && !avd->homogeneous_cpus) ||
+	    unlikely(!avd->ready) || avail_test)
 		return riscv_hwprobe(pairs, pair_count, cpusetsize, cpus, flags);
 
 	/* This is something we can handle, fill out the pairs. */
@@ -48,7 +49,7 @@ static int riscv_vdso_get_values(struct riscv_hwprobe *pairs, size_t pair_count,
 
 static int riscv_vdso_get_cpus(struct riscv_hwprobe *pairs, size_t pair_count,
 			       size_t cpusetsize, unsigned long *cpus,
-			       unsigned int flags)
+			       unsigned int flags, bool avail_test)
 {
 	const struct vdso_arch_data *avd = &vdso_u_arch_data;
 	struct riscv_hwprobe *p = pairs;
@@ -68,7 +69,8 @@ static int riscv_vdso_get_cpus(struct riscv_hwprobe *pairs, size_t pair_count,
 		}
 	}
 
-	if (empty_cpus || flags != RISCV_HWPROBE_WHICH_CPUS || !avd->homogeneous_cpus)
+	if (empty_cpus || flags != RISCV_HWPROBE_WHICH_CPUS ||
+	    !avd->homogeneous_cpus || avail_test)
 		return riscv_hwprobe(pairs, pair_count, cpusetsize, cpus, flags);
 
 	while (p < end) {
@@ -105,10 +107,21 @@ int __vdso_riscv_hwprobe(struct riscv_hwprobe *pairs, size_t pair_count,
 			 size_t cpusetsize, unsigned long *cpus,
 			 unsigned int flags)
 {
+	struct riscv_hwprobe *p = pairs;
+	bool avail_test = false;
+	size_t i;
+
+	for (i = 0; i < pair_count; i++) {
+		if (p[i].key == RISCV_HWPROBE_KEY_EXT_ENABLED) {
+			avail_test = true;
+			break;
+		}
+	}
+
 	if (flags & RISCV_HWPROBE_WHICH_CPUS)
 		return riscv_vdso_get_cpus(pairs, pair_count, cpusetsize,
-					   cpus, flags);
+					   cpus, flags, avail_test);
 
 	return riscv_vdso_get_values(pairs, pair_count, cpusetsize,
-				     cpus, flags);
+				     cpus, flags, avail_test);
 }

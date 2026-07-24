@@ -79,8 +79,9 @@ out:
 }
 
 static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
-			     const struct cpumask *cpus)
+			     const struct cpumask *cpus, bool report_avail)
 {
+	bool report_v;
 	int cpu;
 	u64 missing = 0;
 
@@ -91,7 +92,8 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 	if (riscv_isa_extension_available(NULL, c))
 		pair->value |= RISCV_HWPROBE_IMA_C;
 
-	if (has_vector() && riscv_isa_extension_available(NULL, v))
+	report_v = report_avail ? riscv_v_vstate_ctrl_user_allowed() : true;
+	if (has_vector() && riscv_isa_extension_available(NULL, v) && report_v)
 		pair->value |= RISCV_HWPROBE_IMA_V;
 
 	/*
@@ -146,7 +148,7 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 		 * All the following extensions must depend on the kernel
 		 * support of V.
 		 */
-		if (has_vector()) {
+		if (has_vector() && report_v) {
 			EXT_KEY(isainfo->isa, ZVBB, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVBC, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVE32F, pair->value, missing);
@@ -215,7 +217,7 @@ static bool hwprobe_ext0_has(const struct cpumask *cpus, u64 ext)
 {
 	struct riscv_hwprobe pair;
 
-	hwprobe_isa_ext0(&pair, cpus);
+	hwprobe_isa_ext0(&pair, cpus, false);
 	return (pair.value & ext);
 }
 
@@ -293,7 +295,7 @@ static u64 hwprobe_vec_misaligned(const struct cpumask *cpus)
 #endif
 
 static void hwprobe_one_pair(struct riscv_hwprobe *pair,
-			     const struct cpumask *cpus)
+			     const struct cpumask *cpus, bool test_avail)
 {
 	switch (pair->key) {
 	case RISCV_HWPROBE_KEY_MVENDORID:
@@ -312,7 +314,7 @@ static void hwprobe_one_pair(struct riscv_hwprobe *pair,
 		break;
 
 	case RISCV_HWPROBE_KEY_IMA_EXT_0:
-		hwprobe_isa_ext0(pair, cpus);
+		hwprobe_isa_ext0(pair, cpus, test_avail);
 		break;
 
 	case RISCV_HWPROBE_KEY_IMA_EXT_1:
@@ -352,11 +354,11 @@ static void hwprobe_one_pair(struct riscv_hwprobe *pair,
 		break;
 
 	case RISCV_HWPROBE_KEY_VENDOR_EXT_SIFIVE_0:
-		hwprobe_isa_vendor_ext_sifive_0(pair, cpus);
+		hwprobe_isa_vendor_ext_sifive_0(pair, cpus, test_avail);
 		break;
 
 	case RISCV_HWPROBE_KEY_VENDOR_EXT_THEAD_0:
-		hwprobe_isa_vendor_ext_thead_0(pair, cpus);
+		hwprobe_isa_vendor_ext_thead_0(pair, cpus, test_avail);
 		break;
 	case RISCV_HWPROBE_KEY_VENDOR_EXT_MIPS_0:
 		hwprobe_isa_vendor_ext_mips_0(pair, cpus);
@@ -379,6 +381,7 @@ static int hwprobe_get_values(struct riscv_hwprobe __user *pairs,
 			      unsigned long __user *cpus_user,
 			      unsigned int flags)
 {
+	bool test_avail = false;
 	size_t out;
 	int ret;
 	cpumask_t cpus;
@@ -419,7 +422,10 @@ static int hwprobe_get_values(struct riscv_hwprobe __user *pairs,
 			return -EFAULT;
 
 		pair.value = 0;
-		hwprobe_one_pair(&pair, &cpus);
+		if (pair.key == RISCV_HWPROBE_KEY_EXT_ENABLED)
+			test_avail = true;
+		else
+			hwprobe_one_pair(&pair, &cpus, test_avail);
 		ret = put_user(pair.key, &pairs->key);
 		if (ret == 0)
 			ret = put_user(pair.value, &pairs->value);
@@ -438,6 +444,7 @@ static int hwprobe_get_cpus(struct riscv_hwprobe __user *pairs,
 {
 	cpumask_t cpus, one_cpu;
 	bool clear_all = false;
+	bool test_avail = false;
 	size_t i;
 	int ret;
 
@@ -477,6 +484,10 @@ static int hwprobe_get_cpus(struct riscv_hwprobe __user *pairs,
 			if (ret)
 				return -EFAULT;
 		}
+		if (pair.key == RISCV_HWPROBE_KEY_EXT_ENABLED) {
+			test_avail = true;
+			continue;
+		}
 
 		if (clear_all)
 			continue;
@@ -486,7 +497,7 @@ static int hwprobe_get_cpus(struct riscv_hwprobe __user *pairs,
 		for_each_cpu(cpu, &cpus) {
 			cpumask_set_cpu(cpu, &one_cpu);
 
-			hwprobe_one_pair(&tmp, &one_cpu);
+			hwprobe_one_pair(&tmp, &one_cpu, test_avail);
 
 			if (!riscv_hwprobe_pair_cmp(&tmp, &pair))
 				cpumask_clear_cpu(cpu, &cpus);
@@ -536,8 +547,11 @@ static int complete_hwprobe_vdso_data(void)
 	 * save a syscall in the common case.
 	 */
 	for (key = 0; key <= RISCV_HWPROBE_MAX_KEY; key++) {
+		if (key == RISCV_HWPROBE_KEY_EXT_ENABLED)
+			continue;
+
 		pair.key = key;
-		hwprobe_one_pair(&pair, cpu_online_mask);
+		hwprobe_one_pair(&pair, cpu_online_mask, false);
 
 		WARN_ON_ONCE(pair.key < 0);
 
