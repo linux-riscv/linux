@@ -116,6 +116,8 @@ struct riscv_hwprobe {
 #define RISCV_HWPROBE_KEY_ZICBOP_BLOCK_SIZE	15
 #define RISCV_HWPROBE_KEY_IMA_EXT_1		16
 #define		RISCV_HWPROBE_EXT_ZICFISS	(1ULL << 0)
+/* Modifier key working as a signal to the kernel to gather enablement status */
+#define RISCV_HWPROBE_KEY_EXT_ENABLED	17
 
 /* Increase RISCV_HWPROBE_MAX_KEY when adding items. */
 
