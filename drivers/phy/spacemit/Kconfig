@@ -23,3 +23,16 @@ config PHY_SPACEMIT_K1_USB2
 	help
 	  Enable this to support K1 USB 2.0 PHY driver. This driver takes care of
 	  enabling and clock setup and will be used by K1 udc/ehci/otg/xhci driver.
+
+config PHY_SPACEMIT_K3_INNO_DP
+	tristate "SpacemiT K3 Innosilicon DisplayPort PHY driver"
+	depends on (ARCH_SPACEMIT || COMPILE_TEST) && OF
+	depends on COMMON_CLK
+	select GENERIC_PHY
+	select REGMAP
+	help
+	  Enable support for the Innosilicon DisplayPort transmit PHY
+	  integrated in the SpacemiT K3 SoC. The PHY shares its MMIO window
+	  with its parent DP/eDP controller (drivers/gpu/drm/spacemit/) and
+	  exposes lane / rate / vswing / pre-emphasis control through the
+	  generic PHY framework.
