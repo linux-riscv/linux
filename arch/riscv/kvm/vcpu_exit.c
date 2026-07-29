@@ -43,6 +43,13 @@ static int gstage_page_fault(struct kvm_vcpu *vcpu, struct kvm_run *run,
 		};
 	}
 
+	if (kvm_slot_userfault_fault(memslot, gfn)) {
+		kvm_prepare_memory_fault_exit(vcpu, fault_addr, PAGE_SIZE,
+					trap->scause == EXC_STORE_GUEST_PAGE_FAULT,
+					trap->scause == EXC_INST_GUEST_PAGE_FAULT, false);
+		return 0;
+	}
+
 	ret = kvm_riscv_mmu_map(vcpu, memslot, fault_addr, hva,
 				(trap->scause == EXC_STORE_GUEST_PAGE_FAULT) ? true : false,
 				&host_map);

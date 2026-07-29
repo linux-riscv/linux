@@ -582,7 +582,9 @@ int kvm_riscv_mmu_map(struct kvm_vcpu *vcpu, struct kvm_memory_slot *memslot,
 	else
 		vma_pageshift = PAGE_SHIFT;
 	vma_pagesize = 1ULL << vma_pageshift;
-	if (logging || (vma->vm_flags & VM_PFNMAP))
+	bool userfault = !!(memslot->flags & KVM_MEM_USERFAULT);
+
+	if (logging || userfault || (vma->vm_flags & VM_PFNMAP))
 		vma_pagesize = PAGE_SIZE;
 	else if (is_hugetlb)
 		vma_pagesize = hugetlb_mapping_size(memslot, hva, vma_pagesize);
@@ -639,7 +641,7 @@ int kvm_riscv_mmu_map(struct kvm_vcpu *vcpu, struct kvm_memory_slot *memslot,
 	 * possible. Hugetlb mappings already selected their target size above,
 	 * so do not promote them through the THP helper.
 	 */
-	if (!logging && !is_hugetlb && vma_pagesize == PAGE_SIZE)
+	if (!logging && !userfault && !is_hugetlb && vma_pagesize == PAGE_SIZE)
 		vma_pagesize = transparent_hugepage_adjust(kvm, memslot, hva, &hfn, &gpa);
 
 	if (writable) {
