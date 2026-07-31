@@ -375,6 +375,9 @@ static int spacemit_i2s_init_dai(struct spacemit_i2s_dev *i2s,
 	struct property *dma_names;
 	const char *dma_name;
 
+	if (dp)
+		*dp = NULL;
+
 	of_property_for_each_string(node, "dma-names", dma_names, dma_name) {
 		if (!strcmp(dma_name, "tx"))
 			i2s->has_playback = true;
