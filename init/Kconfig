@@ -1569,6 +1569,18 @@ config BOOT_CONFIG_EMBED_FILE
 	  This bootconfig will be used if there is no initrd or no other
 	  bootconfig in the initrd.
 
+config COMMAND_LINE_SIZE
+	int "Maximum size of kernel command line"
+	default 4096 if S390 || LOONGARCH || MIPS || UM
+	default 2048 if X86 || ARM64 || POWERPC || SPARC64
+	default 1024 if ARM || PARISC || RISCV
+	default 256 if ALPHA || ARC || M68K || MICROBLAZE || SPARC32 || XTENSA
+	default 512
+	range 256 1048576
+	help
+	  This allows you to specify the maximum length of the kernel command
+	  line.
+
 config CMDLINE_LOG_WRAP_IDEAL_LEN
 	int "Length to try to wrap the cmdline when logged at boot"
 	default 1021
