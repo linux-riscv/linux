@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/bao/bao,io-dispatcher.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Bao Hypervisor I/O Dispatcher Device
+
+maintainers:
+  - João Peixoto <jpeixoto@osyx.tech>
+  - José Martins <jose@osyx.tech>
+  - David Cerdeira <davidmcerdeira@osyx.tech>
+
+description:
+  Backend device exposed by the Bao hypervisor to a guest that services
+  paravirtualised (VirtIO) I/O on behalf of a frontend guest. Each device
+  owns one contiguous shared-memory region used to exchange I/O buffers
+  with its frontend, and one interrupt the hypervisor raises to signal a
+  pending I/O request. A backend guest that services several frontends
+  instantiates one node per backend device.
+
+properties:
+  compatible:
+    const: bao,io-dispatcher
+
+  reg:
+    maxItems: 1
+    description:
+      Shared-memory region used to exchange I/O buffers with the frontend.
+
+  interrupts:
+    maxItems: 1
+    description:
+      Interrupt raised by the hypervisor to signal a pending I/O request.
+
+  bao,id:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Hypervisor-assigned identifier of the backend device model. It must
+      match the identifier configured for the device model in the
+      hypervisor.
+
+required:
+  - compatible
+  - reg
+  - interrupts
+  - bao,id
+
+additionalProperties: false
+
+examples:
+  - |
+    shmem@50000000 {
+        compatible = "bao,io-dispatcher";
+        reg = <0x50000000 0x01000000>;
+        interrupts = <0x0 0x08 0x1>;
+        bao,id = <0>;
+    };
