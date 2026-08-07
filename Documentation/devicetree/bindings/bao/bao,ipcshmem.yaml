@@ -1,0 +1,59 @@
+# SPDX-License-Identifier: GPL-2.0-only OR BSD-2-Clause
+%YAML 1.2
+---
+$id: http://devicetree.org/schemas/bao/bao,ipcshmem.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
+
+title: Bao Hypervisor IPC Shared Memory Device
+
+maintainers:
+  - João Peixoto <jpeixoto@osyx.tech>
+  - José Martins <jose@osyx.tech>
+  - David Cerdeira <davidmcerdeira@osyx.tech>
+
+description: |
+  Shared-memory device exposed by the Bao hypervisor to a guest so that it
+  can exchange data with a peer guest. The hypervisor provides two
+  contiguous memory regions, one the guest reads from (written by the peer)
+  and one the guest writes to (read by the peer). A write is signalled to
+  the peer through a hypercall identified by bao,id.
+
+properties:
+  compatible:
+    const: bao,ipcshmem
+
+  reg:
+    items:
+      - description: region read by this guest and written by the peer
+      - description: region written by this guest and read by the peer
+
+  reg-names:
+    items:
+      - const: read
+      - const: write
+
+  bao,id:
+    $ref: /schemas/types.yaml#/definitions/uint32
+    description:
+      Hypervisor-assigned identifier of this shared-memory channel. The
+      guest passes it to the Bao hypercall that notifies the peer of a
+      write, so it must match the identifier configured for the channel in
+      the hypervisor.
+
+required:
+  - compatible
+  - reg
+  - reg-names
+  - bao,id
+
+additionalProperties: false
+
+examples:
+  - |
+    shmem@f0000000 {
+        compatible = "bao,ipcshmem";
+        reg = <0xf0000000 0x2000>,
+              <0xf0002000 0x2000>;
+        reg-names = "read", "write";
+        bao,id = <0>;
+    };
