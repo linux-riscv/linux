@@ -2157,3 +2157,8 @@ bool bpf_jit_supports_fsession(void)
 {
 	return true;
 }
+
+bool bpf_jit_supports_private_stack(void)
+{
+        return true;
+}
