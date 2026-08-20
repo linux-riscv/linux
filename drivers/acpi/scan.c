@@ -1141,9 +1141,6 @@ static void acpi_bus_get_power_flags(struct acpi_device *device)
 		if (!list_empty(&device->power.states[ACPI_STATE_D3_HOT].resources))
 			device->power.states[ACPI_STATE_D3_COLD].flags.valid = 1;
 	}
-
-	if (acpi_bus_init_power(device))
-		device->flags.power_manageable = 0;
 }
 
 static void acpi_bus_get_flags(struct acpi_device *device)
@@ -1822,7 +1819,6 @@ void acpi_init_device_object(struct acpi_device *device, acpi_handle handle,
 	acpi_init_properties(device);
 	acpi_bus_get_flags(device);
 	device->flags.match_driver = false;
-	device->flags.initialized = true;
 	device->flags.enumeration_by_parent =
 		acpi_device_enumeration_by_parent(device);
 	acpi_device_clear_enumerated(device);
