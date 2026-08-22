@@ -13,6 +13,7 @@
 #include <asm/cacheflush.h>
 #include <asm/bug.h>
 #include <asm/text-patching.h>
+#include <asm/insn.h>
 
 #include "decode-insn.h"
 
@@ -69,6 +70,61 @@ static bool __kprobes arch_check_kprobe(unsigned long addr)
 	return false;
 }
 
+/*
+ * A trap taken in the middle of an LR/SC sequence clears the load
+ * reservation, so an SC following the probed instruction would always
+ * fail and the enclosing retry loop would re-enter the breakpoint.
+ * Reject probes inside such a sequence.
+ *
+ * A constrained LR/SC loop (Zalrsc) must be contained within a 64-byte
+ * contiguous region of memory and comprise at most 16 instructions.
+ * Both bounds hold regardless of the C extension, so scanning back
+ * 64 bytes from the probed instruction always covers the enclosing
+ * sequence.
+ */
+#define MAX_ATOMIC_CONTEXT_SIZE	64
+
+static bool __kprobes riscv_probe_insn_in_atomic(unsigned long addr)
+{
+	unsigned long tmp, offset, scan_start;
+	bool in_atomic = false;
+
+	if (!kallsyms_lookup_size_offset(addr, NULL, &offset))
+		return false;
+
+	tmp = addr - offset;				/* function entry */
+
+	if (offset > MAX_ATOMIC_CONTEXT_SIZE)
+		scan_start = addr - MAX_ATOMIC_CONTEXT_SIZE;
+	else
+		scan_start = tmp;
+
+	/*
+	 * scan_start is not necessarily an instruction boundary, so walk
+	 * forward from the function entry to the first instruction start
+	 * at or after scan_start.  Losing at most one instruction of
+	 * coverage this way still leaves a window wide enough to contain
+	 * any constrained LR/SC loop.
+	 */
+	while (tmp < scan_start)
+		tmp += GET_INSN_LENGTH(*(u16 *)tmp);
+
+	/* scan the window, tracking whether an LR is still outstanding */
+	while (tmp < addr) {
+		u32 insn = *(u32 *)tmp;
+
+		if (GET_INSN_LENGTH(insn) == 4) {
+			if (riscv_insn_is_lr(insn))
+				in_atomic = true;
+			else if (riscv_insn_is_sc(insn))
+				in_atomic = false;
+		}
+		tmp += GET_INSN_LENGTH(insn);
+	}
+
+	return in_atomic;
+}
+
 int __kprobes arch_prepare_kprobe(struct kprobe *p)
 {
 	u16 *insn = (u16 *)p->addr;
@@ -78,6 +134,9 @@ int __kprobes arch_prepare_kprobe(struct kprobe *p)
 
 	if (!arch_check_kprobe((unsigned long)p->addr))
 		return -EILSEQ;
+
+	if (riscv_probe_insn_in_atomic((unsigned long)p->addr))
+		return -EINVAL;
 
 	/* copy instruction */
 	p->opcode = (kprobe_opcode_t)(*insn++);
