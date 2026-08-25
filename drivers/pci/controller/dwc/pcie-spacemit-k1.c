@@ -127,17 +127,21 @@ static int k1_pcie_init(struct dw_pcie_rp *pp)
 {
 	struct dw_pcie *pci = to_dw_pcie_from_pp(pp);
 	struct k1_pcie *k1 = to_k1_pcie(pci);
+	struct device *dev = pci->dev;
 	u32 reset_ctrl;
 	u32 val;
 	int ret;
 
+	dev_info(dev, "K1DBG 1 toggle_soft_reset\n");
 	k1_pcie_toggle_soft_reset(k1);
 
+	dev_info(dev, "K1DBG 2 enable_resources\n");
 	ret = k1_pcie_enable_resources(k1);
 	if (ret)
 		return ret;
 
 	/* Set the PCI vendor and device ID */
+	dev_info(dev, "K1DBG 3 first DBI write (vendor/device ID)\n");
 	dw_pcie_dbi_ro_wr_en(pci);
 	dw_pcie_writew_dbi(pci, PCI_VENDOR_ID, PCI_VENDOR_ID_SPACEMIT);
 	dw_pcie_writew_dbi(pci, PCI_DEVICE_ID, PCI_DEVICE_ID_SPACEMIT_K1);
@@ -150,6 +154,7 @@ static int k1_pcie_init(struct dw_pcie_rp *pp)
 	 * delay first.  Write, then read it back to guarantee the write
 	 * reaches the device before we start the delay.
 	 */
+	dev_info(dev, "K1DBG 4 assert PERST# + 100ms\n");
 	reset_ctrl = k1->pmu_off + PCIE_CLK_RESET_CONTROL;
 	regmap_set_bits(k1->pmu, reset_ctrl, PCIE_RC_PERST);
 	regmap_read(k1->pmu, reset_ctrl, &val);
@@ -159,8 +164,10 @@ static int k1_pcie_init(struct dw_pcie_rp *pp)
 	 * Put the controller in root complex mode, and indicate that
 	 * Vaux (3.3v) is present.
 	 */
+	dev_info(dev, "K1DBG 5 RC mode + AUX_PWR_DET\n");
 	regmap_set_bits(k1->pmu, reset_ctrl, DEVICE_TYPE_RC | PCIE_AUX_PWR_DET);
 
+	dev_info(dev, "K1DBG 6 phy_init\n");
 	ret = phy_init(k1->phy);
 	if (ret) {
 		k1_pcie_disable_resources(k1);
@@ -169,11 +176,14 @@ static int k1_pcie_init(struct dw_pcie_rp *pp)
 	}
 
 	/* Deassert fundamental reset (drive PERST# high) */
+	dev_info(dev, "K1DBG 7 deassert PERST#\n");
 	regmap_clear_bits(k1->pmu, reset_ctrl, PCIE_RC_PERST);
 
 	/* Finally, as a workaround, disable ASPM L1 */
+	dev_info(dev, "K1DBG 8 disable_aspm_l1\n");
 	k1_pcie_disable_aspm_l1(k1);
 
+	dev_info(dev, "K1DBG 9 init complete\n");
 	return 0;
 }
 
