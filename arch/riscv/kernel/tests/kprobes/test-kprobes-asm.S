@@ -198,6 +198,25 @@ SYM_FUNC_END(test_kprobes_c_jal)
 
 #endif /* CONFIG_RISCV_ISA_C */
 
+SYM_FUNC_START(test_kprobes_lrsc)
+	li a0, 1
+1:
+	lr.w a1, 0(x0)
+.Llrsc_inside:
+	addi a1, a1, 1
+	sc.w a2, a1, 0(x0)
+	bnez a2, 1b
+.Llrsc_after:
+	li a0, KPROBE_TEST_MAGIC
+	ret
+SYM_FUNC_END(test_kprobes_lrsc)
+
+.section .rodata
+SYM_DATA_START(test_kprobes_lrsc_offsets)
+	RISCV_PTR .Llrsc_inside - test_kprobes_lrsc
+	RISCV_PTR .Llrsc_after - test_kprobes_lrsc
+SYM_DATA_END(test_kprobes_lrsc_offsets)
+
 .section .rodata
 SYM_DATA_START(test_kprobes_addresses)
 	RISCV_PTR test_kprobes_add_addr1

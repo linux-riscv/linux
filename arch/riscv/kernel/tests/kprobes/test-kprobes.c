@@ -43,8 +43,27 @@ static void test_kprobe_riscv(struct kunit *test)
 	kfree(kp);
 }
 
+static void test_kprobe_lrsc(struct kunit *test)
+{
+	struct kprobe kp = {};
+
+	kp.pre_handler = kprobe_dummy_handler;
+
+	/* a probe inside an LR/SC sequence must be rejected */
+	kp.addr = (kprobe_opcode_t *)((unsigned long)test_kprobes_lrsc +
+				      test_kprobes_lrsc_offsets[0]);
+	KUNIT_EXPECT_LT(test, register_kprobe(&kp), 0);
+
+	/* a probe right after the sequence must be accepted */
+	kp.addr = (kprobe_opcode_t *)((unsigned long)test_kprobes_lrsc +
+				      test_kprobes_lrsc_offsets[1]);
+	KUNIT_EXPECT_EQ(test, 0, register_kprobe(&kp));
+	unregister_kprobe(&kp);
+}
+
 static struct kunit_case kprobes_testcases[] = {
 	KUNIT_CASE(test_kprobe_riscv),
+	KUNIT_CASE(test_kprobe_lrsc),
 	{}
 };
 

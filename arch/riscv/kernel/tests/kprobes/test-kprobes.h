@@ -19,6 +19,12 @@ extern void *test_kprobes_addresses[];
 /* array of functions that return KPROBE_TEST_MAGIC */
 extern long (*test_kprobes_functions[])(void);
 
+/* function containing an LR/SC sequence, and offsets (from its start) of
+ * the instruction inside and right after the sequence
+ */
+extern void test_kprobes_lrsc(void);
+extern unsigned long test_kprobes_lrsc_offsets[];
+
 #endif /* __ASSEMBLER__ */
 
 #endif /* TEST_KPROBES_H */
