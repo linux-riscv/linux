@@ -12,6 +12,7 @@
 #include <linux/mmc/card.h>
 #include <linux/mmc/host.h>
 #include <linux/mmc/mmc.h>
+#include <linux/mmc/sd.h>
 #include <linux/module.h>
 #include <linux/of.h>
 #include <linux/of_device.h>
@@ -84,7 +85,7 @@
 #define  SDHC_RX_DLINE_GAIN             BIT(8)
 #define  SDHC_TX_DLINE_REG_MASK         GENMASK(23, 16)
 
-#define SPACEMIT_RX_DLINE_REG		9
+#define SPACEMIT_RX_DLINE_REG		0
 #define SPACEMIT_RX_TUNE_DELAY_MIN	0x0
 #define SPACEMIT_RX_TUNE_DELAY_MAX	0xFF
 
@@ -162,6 +163,16 @@ static void spacemit_sdhci_prepare_tuning(struct sdhci_host *host)
 		spacemit_sdhci_setbits(host, SDHC_HS200_USE_RFIFO, SPACEMIT_SDHC_PHY_FUNC_REG);
 }
 
+static void spacemit_sdhci_set_clk_gate(struct sdhci_host *host, unsigned int auto_gate)
+{
+	if (auto_gate)
+		spacemit_sdhci_clrbits(host, SDHC_OVRRD_CLK_OEN | SDHC_FORCE_CLK_ON,
+				       SPACEMIT_SDHC_OP_EXT_REG);
+	else
+		spacemit_sdhci_setbits(host, SDHC_OVRRD_CLK_OEN | SDHC_FORCE_CLK_ON,
+				       SPACEMIT_SDHC_OP_EXT_REG);
+}
+
 static void spacemit_sdhci_reset(struct sdhci_host *host, u8 mask)
 {
 	sdhci_reset(host, mask);
@@ -169,21 +180,20 @@ static void spacemit_sdhci_reset(struct sdhci_host *host, u8 mask)
 	if (mask != SDHCI_RESET_ALL)
 		return;
 
-	spacemit_sdhci_setbits(host, SDHC_PHY_FUNC_EN | SDHC_PHY_PLL_LOCK,
-			       SPACEMIT_SDHC_PHY_CTRL_REG);
+	if (host->mmc->caps2 & MMC_CAP2_NO_MMC) {
+		/* SD/SDIO: bypass PHY, use TX internal clock */
+		spacemit_sdhci_setbits(host, SDHC_TX_INT_CLK_SEL, SPACEMIT_SDHC_TX_CFG_REG);
+	} else {
+		/* eMMC: use PHY function mode */
+		spacemit_sdhci_setbits(host, SDHC_PHY_FUNC_EN | SDHC_PHY_PLL_LOCK,
+				       SPACEMIT_SDHC_PHY_CTRL_REG);
 
-	spacemit_sdhci_clrsetbits(host, SDHC_PHY_DRIVE_SEL,
-				  SDHC_RX_BIAS_CTRL | FIELD_PREP(SDHC_PHY_DRIVE_SEL, 4),
-				  SPACEMIT_SDHC_PHY_PADCFG_REG);
+		spacemit_sdhci_clrsetbits(host, SDHC_PHY_DRIVE_SEL,
+					  SDHC_RX_BIAS_CTRL | FIELD_PREP(SDHC_PHY_DRIVE_SEL, 4),
+					  SPACEMIT_SDHC_PHY_PADCFG_REG);
 
-	if (!(host->mmc->caps2 & MMC_CAP2_NO_MMC))
 		spacemit_sdhci_setbits(host, SDHC_MMC_CARD_MODE, SPACEMIT_SDHC_MMC_CTRL_REG);
-
-	spacemit_sdhci_setbits(host, SDHC_GEN_PAD_CLK_ON, SPACEMIT_SDHC_LEGACY_CTRL_REG);
-
-	if (host->mmc->caps2 & MMC_CAP2_NO_MMC)
-		spacemit_sdhci_setbits(host, SDHC_OVRRD_CLK_OEN | SDHC_FORCE_CLK_ON,
-				       SPACEMIT_SDHC_OP_EXT_REG);
+	}
 }
 
 static void spacemit_sdhci_set_uhs_signaling(struct sdhci_host *host, unsigned int timing)
@@ -195,9 +205,6 @@ static void spacemit_sdhci_set_uhs_signaling(struct sdhci_host *host, unsigned i
 		spacemit_sdhci_setbits(host, SDHC_MMC_HS400, SPACEMIT_SDHC_MMC_CTRL_REG);
 
 	sdhci_set_uhs_signaling(host, timing);
-
-	if (!(host->mmc->caps2 & MMC_CAP2_NO_SDIO))
-		spacemit_sdhci_setbits(host, SDHCI_CTRL_VDD_180, SDHCI_HOST_CONTROL2);
 }
 
 static void spacemit_sdhci_set_clock(struct sdhci_host *host, unsigned int clock)
@@ -210,6 +217,20 @@ static void spacemit_sdhci_set_clock(struct sdhci_host *host, unsigned int clock
 		spacemit_sdhci_clrbits(host, SDHC_TX_INT_CLK_SEL, SPACEMIT_SDHC_TX_CFG_REG);
 
 	sdhci_set_clock(host, clock);
+
+	if (host->mmc->caps2 & MMC_CAP2_NO_MMC) {
+		/*
+		 * During CMD11 voltage switch to 1.8V, temporarily force the
+		 * clock on to ensure DAT[3:0] can be sampled correctly after
+		 * the switch. Auto gating is restored in card_busy() once the
+		 * switch completes.
+		 */
+		if ((SDHCI_GET_CMD(sdhci_readw(host, SDHCI_COMMAND)) == SD_SWITCH_VOLTAGE) &&
+		    host->mmc->ios.signal_voltage == MMC_SIGNAL_VOLTAGE_180) {
+			if (clock)
+				spacemit_sdhci_set_clk_gate(host, 0);
+		}
+	}
 };
 
 static void spacemit_sdhci_phy_dll_init(struct sdhci_host *host)
@@ -315,7 +336,7 @@ static int spacemit_sdhci_execute_tuning(struct sdhci_host *host, u32 opcode)
 		max_pass_start = current_start;
 	}
 
-	if (max_pass_len < 3) {
+	if (max_pass_len < 50) {
 		dev_err(mmc_dev(host->mmc), "Tuning failed: no stable window found\n");
 		return -EIO;
 	}
@@ -407,7 +428,8 @@ static int spacemit_sdhci_start_signal_voltage_switch(struct mmc_host *mmc,
 	if (ret)
 		return ret;
 
-	if (!sdhst->pinctrl)
+	/* No pinctrl or no "uhs" state */
+	if (!sdhst->pinctrl || !sdhst->pinctrl_uhs)
 		return 0;
 
 	/* Select appropriate pinctrl state based on signal voltage */
@@ -491,11 +513,29 @@ static inline void spacemit_sdhci_get_pins(struct device *dev,
 		sdhst->pinctrl_default, sdhst->pinctrl_uhs);
 }
 
+static int spacemit_sdhci_card_busy(struct mmc_host *mmc)
+{
+	struct sdhci_host *host = mmc_priv(mmc);
+	u32 present_state;
+
+	present_state = sdhci_readl(host, SDHCI_PRESENT_STATE);
+
+	if (host->mmc->caps2 & MMC_CAP2_NO_MMC) {
+		if ((SDHCI_GET_CMD(sdhci_readw(host, SDHCI_COMMAND)) == SD_SWITCH_VOLTAGE) &&
+		    host->mmc->ios.signal_voltage == MMC_SIGNAL_VOLTAGE_180)
+			/* Recover auto clock after voltage switch */
+			spacemit_sdhci_set_clk_gate(host, 1);
+	}
+
+	return !(present_state & SDHCI_DATA_0_LVL_MASK);
+}
+
 static const struct sdhci_ops spacemit_sdhci_ops = {
 	.get_max_clock		= spacemit_sdhci_clk_get_max_clock,
 	.reset			= spacemit_sdhci_reset,
 	.set_bus_width		= sdhci_set_bus_width,
 	.set_clock		= spacemit_sdhci_set_clock,
+	.set_power		= sdhci_set_power_and_bus_voltage,
 	.set_uhs_signaling	= spacemit_sdhci_set_uhs_signaling,
 	.platform_execute_tuning = spacemit_sdhci_execute_tuning,
 };
@@ -554,8 +594,10 @@ static int spacemit_sdhci_probe(struct platform_device *pdev)
 
 	sdhci_get_of_property(pdev);
 
+	mops = &host->mmc_host_ops;
+	mops->card_busy = spacemit_sdhci_card_busy;
+
 	if (!(host->mmc->caps2 & MMC_CAP2_NO_MMC)) {
-		mops = &host->mmc_host_ops;
 		mops->hs400_prepare_ddr	= spacemit_sdhci_pre_select_hs400;
 		mops->hs400_complete	= spacemit_sdhci_post_select_hs400;
 		mops->hs400_downgrade	= spacemit_sdhci_pre_hs400_to_hs200;
