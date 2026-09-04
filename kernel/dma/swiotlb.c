@@ -80,6 +80,14 @@ struct io_tlb_slot {
 
 static bool swiotlb_force_bounce;
 static bool swiotlb_force_disable;
+static bool restricted_dma_pool_present __initdata;
+
+enum swiotlb_pool_policy {
+	SWIOTLB_POOL_NONE,
+	SWIOTLB_POOL_MINIMAL,
+	SWIOTLB_POOL_DEFAULT,
+	SWIOTLB_POOL_CC_GUEST,
+};
 
 #ifdef CONFIG_SWIOTLB_DYNAMIC
 
@@ -117,26 +125,33 @@ struct io_tlb_area {
 	spinlock_t lock;
 };
 
-/*
- * Round up number of slabs to the next power of 2. The last area is going
- * be smaller than the rest if default_nslabs is not power of two.
- * The number of slot in an area should be a multiple of IO_TLB_SEGSIZE,
- * otherwise a segment may span two or more areas. It conflicts with free
- * contiguous slots tracking: free slots are treated contiguous no matter
- * whether they cross an area boundary.
- *
- * Return true if default_nslabs is rounded up.
- */
+/* Return a segment-aligned size that can be split evenly between areas. */
+static unsigned long swiotlb_aligned_nslabs(unsigned long size)
+{
+	unsigned long nslabs;
+
+	nslabs = ALIGN(DIV_ROUND_UP(size, IO_TLB_SIZE), IO_TLB_SEGSIZE);
+	if (!default_nareas)
+		return nslabs;
+
+	if (nslabs < IO_TLB_SEGSIZE * default_nareas)
+		nslabs = IO_TLB_SEGSIZE * default_nareas;
+	else if (!is_power_of_2(nslabs))
+		nslabs = roundup_pow_of_two(nslabs);
+
+	return nslabs;
+}
+
+/* Return true if default_nslabs is rounded up for the configured areas. */
 static bool round_up_default_nslabs(void)
 {
-	if (!default_nareas)
+	unsigned long nslabs;
+
+	nslabs = swiotlb_aligned_nslabs(default_nslabs << IO_TLB_SHIFT);
+	if (nslabs == default_nslabs)
 		return false;
 
-	if (default_nslabs < IO_TLB_SEGSIZE * default_nareas)
-		default_nslabs = IO_TLB_SEGSIZE * default_nareas;
-	else if (is_power_of_2(default_nslabs))
-		return false;
-	default_nslabs = roundup_pow_of_two(default_nslabs);
+	default_nslabs = nslabs;
 	return true;
 }
 
@@ -290,6 +305,11 @@ unsigned long swiotlb_size_or_default(void)
 	return default_nslabs << IO_TLB_SHIFT;
 }
 
+static bool __init swiotlb_default_size_changed(void)
+{
+	return default_nslabs != IO_TLB_DEFAULT_SIZE >> IO_TLB_SHIFT;
+}
+
 void __init swiotlb_adjust_size(unsigned long size)
 {
 	/*
@@ -297,13 +317,11 @@ void __init swiotlb_adjust_size(unsigned long size)
 	 * architectures such as those supporting memory encryption to
 	 * adjust/expand SWIOTLB size for their use.
 	 */
-	if (default_nslabs != IO_TLB_DEFAULT_SIZE >> IO_TLB_SHIFT)
+	if (swiotlb_default_size_changed())
 		return;
 
-	size = ALIGN(size, IO_TLB_SIZE);
-	default_nslabs = ALIGN(size >> IO_TLB_SHIFT, IO_TLB_SEGSIZE);
-	if (round_up_default_nslabs())
-		size = default_nslabs << IO_TLB_SHIFT;
+	default_nslabs = swiotlb_aligned_nslabs(size);
+	size = default_nslabs << IO_TLB_SHIFT;
 	pr_info("SWIOTLB bounce buffer size adjusted to %luMB", size >> 20);
 }
 
@@ -356,24 +374,15 @@ static void swiotlb_mark_pool_used(struct io_tlb_pool *pool)
 void __init swiotlb_update_mem_attributes(void)
 {
 	struct io_tlb_pool *mem = &io_tlb_default_mem.defpool;
-	unsigned long bytes;
-
-	/*
-	 * if platform support memory encryption, swiotlb buffers are
-	 * shared by default.
-	 */
-	if (cc_platform_has(CC_ATTR_MEM_ENCRYPT))
-		io_tlb_default_mem.cc_shared = true;
-	else
-		io_tlb_default_mem.cc_shared = false;
 
 	if (!mem->nslabs || mem->late_alloc)
 		return;
-	bytes = PAGE_ALIGN(mem->nslabs << IO_TLB_SHIFT);
 
 	if (io_tlb_default_mem.cc_shared) {
 		int ret;
+		unsigned long bytes;
 
+		bytes = PAGE_ALIGN(mem->nslabs << IO_TLB_SHIFT);
 		ret = set_memory_decrypted((unsigned long)mem->vaddr,
 					   bytes >> PAGE_SHIFT);
 		if (ret) {
@@ -439,15 +448,10 @@ static void __init *swiotlb_memblock_alloc(unsigned long nslabs,
 	size_t bytes = PAGE_ALIGN(nslabs << IO_TLB_SHIFT);
 	void *tlb;
 
-	/*
-	 * By default allocate the bounce buffer memory from low memory, but
-	 * allow to pick a location everywhere for hypervisors with guest
-	 * memory encryption.
-	 */
-	if (flags & SWIOTLB_ANY)
-		tlb = memblock_alloc(bytes, PAGE_SIZE);
-	else
+	if (flags & SWIOTLB_INIT_ADDRESSING_LIMIT)
 		tlb = memblock_alloc_low(bytes, PAGE_SIZE);
+	else
+		tlb = memblock_alloc(bytes, PAGE_SIZE);
 
 	if (!tlb) {
 		pr_warn("%s: Failed to allocate %zu bytes tlb structure\n",
@@ -464,22 +468,124 @@ static void __init *swiotlb_memblock_alloc(unsigned long nslabs,
 	return tlb;
 }
 
+static bool __init swiotlb_kmalloc_needs_bounce(void)
+{
+	return IS_ENABLED(CONFIG_DMA_BOUNCE_UNALIGNED_KMALLOC) &&
+	       (dma_get_cache_alignment() > 1);
+}
+
+/**
+ * swiotlb_adjusted_size() - get the prospective adjusted SWIOTLB size
+ *
+ * Return the size that confidential-computing guest sizing would select for
+ * the default pool, without changing the configured SWIOTLB size. An
+ * explicit swiotlb= size is always preserved. An explicit area count is
+ * included in the size calculation. Automatic area sizing is initialized
+ * later from the running kernel's possible CPU map and any resulting size
+ * adjustment is therefore not reflected in the returned size.
+ */
+unsigned long __init swiotlb_adjusted_size(void)
+{
+	unsigned long nslabs, size = swiotlb_size_or_default();
+
+	if (swiotlb_default_size_changed() ||
+	    !cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT))
+		return size;
+	/*
+	 * For SEV and TDX and CCA, all DMA has to occur via
+	 * shared/unencrypted pages. Kernel uses SWIOTLB to make this
+	 * happen without changing device drivers. However, depending on
+	 * the workload being run, the default 64MB of SWIOTLB may not be
+	 * enough and SWIOTLB may run out of buffers for DMA, resulting in
+	 * I/O errors and/or performance degradation especially with high
+	 * I/O workloads.
+	 *
+	 * Adjust the default size of SWIOTLB using a percentage of guest
+	 * memory for SWIOTLB buffers. Also, as the SWIOTLB bounce buffer
+	 * memory is allocated from low memory, ensure that the adjusted
+	 * size is within the limits of low available memory.
+	 *
+	 * The percentage of guest memory used here for SWIOTLB buffers is
+	 * more of an approximation of the static adjustment which 64MB for
+	 * <1G, and ~128M to 256M for 1G-to-4G, i.e., the 6%
+	 */
+	size = memblock_phys_mem_size() * 6 / 100;
+	size = clamp_val(size, IO_TLB_DEFAULT_SIZE, SZ_1G);
+	nslabs = swiotlb_aligned_nslabs(size);
+
+	return nslabs << IO_TLB_SHIFT;
+}
+
+static void __init
+swiotlb_adjust_pool_size(enum swiotlb_pool_policy policy)
+{
+	if (swiotlb_default_size_changed())
+		return;
+
+	switch (policy) {
+	case SWIOTLB_POOL_MINIMAL: {
+		unsigned long size;
+
+		/* Use 1MB per 1GB of RAM for kmalloc() bouncing. */
+		size = DIV_ROUND_UP(memblock_phys_mem_size(), 1024);
+		swiotlb_adjust_size(min(swiotlb_size_or_default(), size));
+		break;
+	}
+	case SWIOTLB_POOL_CC_GUEST:
+		swiotlb_adjust_size(swiotlb_adjusted_size());
+		break;
+	case SWIOTLB_POOL_NONE:
+		WARN(true, "Cannot adjust SWIOTLB size without a pool\n");
+		break;
+	case SWIOTLB_POOL_DEFAULT:
+		break;
+	}
+}
+
+static enum swiotlb_pool_policy __init
+swiotlb_select_pool_policy(unsigned int flags)
+{
+	if (swiotlb_force_disable)
+		return SWIOTLB_POOL_NONE;
+
+	if (cc_platform_has(CC_ATTR_GUEST_MEM_ENCRYPT) &&
+	    !restricted_dma_pool_present)
+		return SWIOTLB_POOL_CC_GUEST;
+
+	if (cc_platform_has(CC_ATTR_HOST_MEM_ENCRYPT))
+		return SWIOTLB_POOL_DEFAULT;
+
+	if (flags & SWIOTLB_INIT_REMAP)
+		return SWIOTLB_POOL_DEFAULT;
+
+	if (flags & SWIOTLB_INIT_ADDRESSING_LIMIT)
+		return SWIOTLB_POOL_DEFAULT;
+
+	if (swiotlb_force_bounce)
+		return SWIOTLB_POOL_DEFAULT;
+
+	if (swiotlb_kmalloc_needs_bounce())
+		return SWIOTLB_POOL_MINIMAL;
+
+	return SWIOTLB_POOL_NONE;
+}
+
 /*
  * Statically reserve bounce buffer space and initialize bounce buffer data
  * structures for the software IO TLB used to implement the DMA API.
  */
-void __init swiotlb_init_remap(bool addressing_limit, unsigned int flags,
-		int (*remap)(void *tlb, unsigned long nslabs))
+void __init swiotlb_init_remap(unsigned int flags,
+			       int (*remap)(void *tlb, unsigned long nslabs))
 {
 	struct io_tlb_pool *mem = &io_tlb_default_mem.defpool;
+	enum swiotlb_pool_policy policy;
 	unsigned long nslabs;
 	unsigned int nareas;
 	size_t alloc_size;
 	void *tlb;
 
-	if (!addressing_limit && !swiotlb_force_bounce)
-		return;
-	if (swiotlb_force_disable)
+	policy = swiotlb_select_pool_policy(flags);
+	if (policy == SWIOTLB_POOL_NONE)
 		return;
 
 	io_tlb_default_mem.force_bounce = swiotlb_force_bounce;
@@ -487,11 +593,17 @@ void __init swiotlb_init_remap(bool addressing_limit, unsigned int flags,
 #ifdef CONFIG_SWIOTLB_DYNAMIC
 	if (!remap)
 		io_tlb_default_mem.can_grow = true;
-	if (flags & SWIOTLB_ANY)
-		io_tlb_default_mem.phys_limit = virt_to_phys(high_memory - 1);
-	else
+	if (flags & SWIOTLB_INIT_ADDRESSING_LIMIT)
 		io_tlb_default_mem.phys_limit = ARCH_LOW_ADDRESS_LIMIT;
+	else
+		io_tlb_default_mem.phys_limit = virt_to_phys(high_memory - 1);
 #endif
+
+	/* if we have host or guest memory encryption */
+	if (cc_platform_has(CC_ATTR_MEM_ENCRYPT))
+		io_tlb_default_mem.cc_shared = true;
+
+	swiotlb_adjust_pool_size(policy);
 
 	if (!default_nareas)
 		swiotlb_adjust_nareas(num_possible_cpus());
@@ -533,9 +645,9 @@ void __init swiotlb_init_remap(bool addressing_limit, unsigned int flags,
 		swiotlb_print_info();
 }
 
-void __init swiotlb_init(bool addressing_limit, unsigned int flags)
+void __init swiotlb_init(unsigned int flags)
 {
-	swiotlb_init_remap(addressing_limit, flags, NULL);
+	swiotlb_init_remap(flags, NULL);
 }
 
 /*
@@ -2082,6 +2194,8 @@ static int __init rmem_swiotlb_setup(unsigned long node,
 	    of_get_flat_dt_prop(node, "linux,dma-default", NULL) ||
 	    of_get_flat_dt_prop(node, "no-map", NULL))
 		return -EINVAL;
+
+	restricted_dma_pool_present = true;
 
 	pr_info("Reserved memory: created restricted DMA pool at %pa, size %ld MiB\n",
 		&rmem->base, (unsigned long)rmem->size / SZ_1M);
