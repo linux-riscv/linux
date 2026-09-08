@@ -1365,8 +1365,8 @@ static void __init prom_check_platform_support(void)
 	/*
 	 * First copy the architecture vec template
 	 *
-	 * use memcpy() instead of *vec = *vec_template so that GCC replaces it
-	 * by __memcpy() when KASAN is active
+	 * use memcpy() instead of *vec = *vec_template so that the compiler
+	 * replaces it by __asan_memcpy() when KASAN is active
 	 */
 	memcpy(&ibm_architecture_vec, &ibm_architecture_vec_template,
 	       sizeof(ibm_architecture_vec));

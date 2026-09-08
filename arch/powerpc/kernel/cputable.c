@@ -36,8 +36,8 @@ void __init set_cur_cpu_spec(struct cpu_spec *s)
 
 	t = PTRRELOC(t);
 	/*
-	 * use memcpy() instead of *t = *s so that GCC replaces it
-	 * by __memcpy() when KASAN is active
+	 * use memcpy() instead of *t = *s so that the compiler replaces it
+	 * by __asan_memcpy() when KASAN is active
 	 */
 	memcpy(t, s, sizeof(*t));
 
@@ -55,7 +55,7 @@ static struct cpu_spec * __init setup_cpu_spec(unsigned long offset,
 
 	/*
 	 * Copy everything, then do fixups. Use memcpy() instead of *t = *s
-	 * so that GCC replaces it by __memcpy() when KASAN is active
+	 * so that the compiler replaces it by __asan_memcpy() when KASAN is active
 	 */
 	memcpy(t, s, sizeof(*t));
 
