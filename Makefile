@@ -561,7 +561,7 @@ PERL		= perl
 PYTHON3		= python3
 CHECK		= sparse
 BASH		= bash
-KGZIP		= gzip
+KGZIP		:= $(if $(shell command -v pigz 2>/dev/null),pigz,gzip)
 KBZIP2		= bzip2
 KLZOP		= lzop
 LZMA		= lzma
@@ -946,8 +946,8 @@ KBUILD_RUSTFLAGS += -Coverflow-checks=$(if $(CONFIG_RUST_OVERFLOW_CHECKS),y,n)
 ifdef CONFIG_CC_IS_GCC
 # gcc-10 renamed --param=allow-store-data-races=0 to
 # -fno-allow-store-data-races.
-KBUILD_CFLAGS	+= $(call cc-option,--param=allow-store-data-races=0)
-KBUILD_CFLAGS	+= $(call cc-option,-fno-allow-store-data-races)
+KBUILD_CFLAGS	+= $(if $(CONFIG_CC_HAS_ALLOW_STORE_DATA_RACES_PARAM),--param=allow-store-data-races=0)
+KBUILD_CFLAGS	+= $(if $(CONFIG_CC_HAS_NO_ALLOW_STORE_DATA_RACES),-fno-allow-store-data-races)
 endif
 
 ifdef CONFIG_READABLE_ASM
@@ -1011,18 +1011,18 @@ endif
 endif
 
 # Explicitly clear padding bits during variable initialization
-KBUILD_CFLAGS += $(call cc-option,-fzero-init-padding-bits=all)
+KBUILD_CFLAGS += $(if $(CONFIG_CC_HAS_ZERO_INIT_PADDING_BITS),-fzero-init-padding-bits=all)
 
 # While VLAs have been removed, GCC produces unreachable stack probes
 # for the randomize_kstack_offset feature. Disable it for all compilers.
-KBUILD_CFLAGS	+= $(call cc-option, -fno-stack-clash-protection)
+KBUILD_CFLAGS	+= $(if $(CONFIG_CC_HAS_NO_STACK_CLASH_PROTECTION),-fno-stack-clash-protection)
 
 # Get details on warnings generated due to GCC value tracking.
-KBUILD_CFLAGS	+= $(call cc-option, -fdiagnostics-show-context=2)
+KBUILD_CFLAGS	+= $(if $(CONFIG_CC_HAS_DIAGNOSTICS_SHOW_CONTEXT),-fdiagnostics-show-context=2)
 
 # Show inlining notes for __attribute__((warning/error)) call chains.
 # GCC supports this unconditionally while Clang 23+ provides a flag.
-KBUILD_CFLAGS	+= $(call cc-option, -fdiagnostics-show-inlining-chain)
+KBUILD_CFLAGS	+= $(if $(CONFIG_CC_HAS_DIAGNOSTICS_SHOW_INLINING_CHAIN),-fdiagnostics-show-inlining-chain)
 
 # Clear used registers at func exit (to reduce data lifetime and ROP gadgets).
 ifdef CONFIG_ZERO_CALL_USED_REGS
@@ -1033,7 +1033,7 @@ ifdef CONFIG_FUNCTION_TRACER
 ifdef CONFIG_FTRACE_MCOUNT_USE_CC
   CC_FLAGS_FTRACE	+= -mrecord-mcount
   ifdef CONFIG_HAVE_NOP_MCOUNT
-    ifeq ($(call cc-option-yn, -mnop-mcount),y)
+    ifdef CONFIG_CC_HAS_MNOP_MCOUNT
       CC_FLAGS_FTRACE	+= -mnop-mcount
       CC_FLAGS_USING	+= -DCC_USING_NOP_MCOUNT
     endif
@@ -1051,8 +1051,7 @@ ifdef CONFIG_FTRACE_MCOUNT_USE_RECORDMCOUNT
   endif
 endif
 ifdef CONFIG_HAVE_FENTRY
-  # s390-linux-gnu-gcc did not support -mfentry until gcc-9.
-  ifeq ($(call cc-option-yn, -mfentry),y)
+  ifdef CONFIG_CC_HAS_MFENTRY
     CC_FLAGS_FTRACE	+= -mfentry
     CC_FLAGS_USING	+= -DCC_USING_FENTRY
   endif
@@ -1160,7 +1159,7 @@ NOSTDINC_FLAGS += -nostdinc
 # the kernel uses only C99 flexible arrays for dynamically sized trailing
 # arrays. Enforce this for everything that may examine structure sizes and
 # perform bounds checking.
-KBUILD_CFLAGS += $(call cc-option, -fstrict-flex-arrays=3)
+KBUILD_CFLAGS += $(if $(CONFIG_CC_HAS_STRICT_FLEX_ARRAYS),-fstrict-flex-arrays=3)
 
 # disable invalid "can't wrap" optimizations for signed / pointers
 KBUILD_CFLAGS	+= -fno-strict-overflow
@@ -1205,6 +1204,10 @@ KBUILD_RUSTFLAGS += --remap-path-prefix=$(srcroot)/= --remap-path-scope=macro
 endif
 endif
 
+ifdef CONFIG_RUST
+KBUILD_RUSTFLAGS += $(if $(CONFIG_RUSTC_HAS_JOBS),-j8,$(if $(CONFIG_RUSTC_HAS_ZTHREADS),-Zthreads=8))
+endif
+
 # include additional Makefiles when needed
 include-y			:= scripts/Makefile.warn
 include-$(CONFIG_DEBUG_INFO)	+= scripts/Makefile.debug
@@ -1240,11 +1243,11 @@ LDFLAGS_vmlinux += --build-id=sha1
 # COMDAT-deduplicated sections. Use --force-group-allocation to resolve these
 # groups when linking modules. The option is available from ld.bfd 2.29 and
 # ld.lld 19.1.0.
-KBUILD_LDFLAGS_MODULE += $(call ld-option,--force-group-allocation)
+KBUILD_LDFLAGS_MODULE += $(if $(CONFIG_LD_HAS_FORCE_GROUP_ALLOCATION),--force-group-allocation)
 
 KBUILD_LDFLAGS	+= -z noexecstack
 ifeq ($(CONFIG_LD_IS_BFD),y)
-KBUILD_LDFLAGS	+= $(call ld-option,--no-warn-rwx-segments)
+KBUILD_LDFLAGS	+= $(if $(CONFIG_LD_HAS_NO_WARN_RWX_SEGMENTS),--no-warn-rwx-segments)
 endif
 
 ifeq ($(CONFIG_STRIP_ASM_SYMS),y)
@@ -1263,8 +1266,10 @@ LDFLAGS_vmlinux += --orphan-handling=$(CONFIG_LD_ORPHAN_WARN_LEVEL)
 endif
 
 ifneq ($(CONFIG_ARCH_VMLINUX_NEEDS_RELOCS),)
-LDFLAGS_vmlinux	+= --emit-relocs --discard-none
+LDFLAGS_vmlinux	+= --discard-none
+LDFLAGS_vmlinux_relocs := --emit-relocs
 endif
+export LDFLAGS_vmlinux_relocs
 
 # Align the architecture of userspace programs with the kernel
 USERFLAGS_FROM_KERNEL := --target=%
@@ -1421,14 +1426,17 @@ archprepare: outputmakefile archheaders archscripts scripts include/config/kerne
 	include/generated/rustc_cfg remove-stale-files
 
 prepare0: archprepare
-	$(Q)$(MAKE) $(build)=scripts/mod
 	$(Q)$(MAKE) $(build)=. prepare
+	$(Q)$(MAKE) $(build)=scripts/mod
+
+ifdef CONFIG_RUST
+export KBUILD_RUST_DIRS := drivers lib mm samples
+endif
 
 # All the preparing..
 prepare: prepare0
 ifdef CONFIG_RUST
 	+$(Q)$(CONFIG_SHELL) $(srctree)/scripts/rust_is_available.sh
-	$(Q)$(MAKE) $(build)=rust
 endif
 
 PHONY += remove-stale-files
@@ -1755,6 +1763,12 @@ modules: modules_prepare
 # Target to prepare building external modules
 modules_prepare: prepare
 	$(Q)$(MAKE) $(build)=scripts scripts/module.lds
+ifdef CONFIG_RUST
+# Ensure rust/ is build before any external rust module which will rely upon it.
+ifeq ($(MAKECMDGOALS),modules_prepare)
+	$(Q)$(MAKE) $(build)=rust
+endif
+endif
 
 endif # CONFIG_MODULES
 
@@ -2237,13 +2251,14 @@ clean: $(clean-dirs)
 	$(call cmd,rmfiles)
 	@find . $(RCS_FIND_IGNORE) \
 		\( -name '*.[aios]' -o -name '*.rsi' -o -name '*.ko' -o -name '.*.cmd' \
+		-o -name '.depcheck.mk' -o -name '.depcheck.mk.tmp' \
 		-o -name '*.ko.*' -o -name '*.o.thinlto.bc' \
 		-o -name '*.dtb' -o -name '*.dtbo' \
 		-o -name '*.dtb.S' -o -name '*.dtbo.S' \
 		-o -name '*.dt.yaml' -o -name 'dtbs-list' \
 		-o -name '*.dwo' -o -name '*.lst' \
 		-o -name '*.su' -o -name '*.mod' \
-		-o -name '.*.d' -o -name '.*.tmp' -o -name '*.mod.c' \
+		-o -name '.*.d' -o -name '.*.tmp' -o -name '*.mod.c' -o -name '*.mod.S' \
 		-o -name '*.lex.c' -o -name '*.tab.[ch]' \
 		-o -name '*.asn1.[ch]' \
 		-o -name '*.symtypes' -o -name 'modules.order' \
