@@ -27,9 +27,6 @@
 
 #include <linux/build_bug.h>
 
-/* Bring in default accessors */
-#include <vdso/vsyscall.h>
-
 #ifndef vdso_calc_ns
 
 #ifdef VDSO_DELTA_NOMASK
@@ -90,6 +87,13 @@ static inline bool vdso_clocksource_ok(const struct vdso_clock *vc)
 static inline bool vdso_cycles_ok(u64 cycles)
 {
 	return true;
+}
+#endif
+
+#ifndef __arch_get_vdso_u_time_data
+static __always_inline const struct vdso_time_data *__arch_get_vdso_u_time_data(void)
+{
+	return &vdso_u_time_data;
 }
 #endif
 
