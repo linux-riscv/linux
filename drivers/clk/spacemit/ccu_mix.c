@@ -13,6 +13,8 @@
 #define MIX_FC_TIMEOUT_US	10000
 #define MIX_FC_DELAY_US		5
 
+static u8 ccu_mux_get_parent(struct clk_hw *hw);
+
 static void ccu_gate_disable(struct clk_hw *hw)
 {
 	struct ccu_mix *mix = hw_to_ccu_mix(hw);
@@ -56,6 +58,9 @@ static unsigned long ccu_div_recalc_rate(struct clk_hw *hw,
 	struct ccu_mix *mix = hw_to_ccu_mix(hw);
 	struct ccu_div_config *div = &mix->div;
 	unsigned long val;
+
+	if (div->bypass & BIT(ccu_mux_get_parent(hw)))
+		return parent_rate;
 
 	val = ccu_read(&mix->common, ctrl) >> div->shift;
 	val &= (1 << div->width) - 1;
@@ -107,22 +112,27 @@ ccu_mix_calc_best_rate(struct clk_hw *hw, unsigned long rate,
 	struct ccu_mix *mix = hw_to_ccu_mix(hw);
 	unsigned int parent_num = clk_hw_get_num_parents(hw);
 	struct ccu_div_config *div = &mix->div;
-	u32 div_max = 1 << div->width;
 	unsigned long best_rate = 0;
+	unsigned long best_delta = ULONG_MAX;
 
 	for (int i = 0; i < parent_num; i++) {
 		struct clk_hw *parent = clk_hw_get_parent_by_index(hw, i);
 		unsigned long parent_rate;
+		u32 div_max = div->bypass & BIT(i) ? 1 : 1 << div->width;
 
 		if (!parent)
 			continue;
 
 		parent_rate = clk_hw_get_rate(parent);
+		if (!parent_rate)
+			continue;
 
 		for (int j = 1; j <= div_max; j++) {
-			unsigned long tmp = DIV_ROUND_CLOSEST_ULL(parent_rate, j);
+			unsigned long tmp = DIV_ROUND_UP_ULL(parent_rate, j);
+			unsigned long delta = abs_diff(tmp, rate);
 
-			if (abs(tmp - rate) < abs(best_rate - rate)) {
+			if (delta < best_delta) {
+				best_delta = delta;
 				best_rate = tmp;
 
 				if (div_val)
@@ -146,7 +156,7 @@ static int ccu_mix_determine_rate(struct clk_hw *hw,
 					   &req->best_parent_hw,
 					   &req->best_parent_rate,
 					   NULL);
-	return 0;
+	return req->rate ? 0 : -EINVAL;
 }
 
 static int ccu_mix_set_rate(struct clk_hw *hw, unsigned long rate,
@@ -155,9 +165,22 @@ static int ccu_mix_set_rate(struct clk_hw *hw, unsigned long rate,
 	struct ccu_mix *mix = hw_to_ccu_mix(hw);
 	struct ccu_common *common = &mix->common;
 	struct ccu_div_config *div = &mix->div;
-	u32 current_div, target_div, mask;
+	u32 current_div, target_div = 0, mask;
+	unsigned long best_delta = ULONG_MAX;
 
-	ccu_mix_calc_best_rate(hw, rate, NULL, NULL, &target_div);
+	if (div->bypass & BIT(ccu_mux_get_parent(hw)))
+		return rate == parent_rate ? 0 : -EINVAL;
+
+	/* set_rate must use the parent selected by CCF, not search other parents. */
+	for (u32 i = 1; i <= BIT(div->width); i++) {
+		unsigned long divided = DIV_ROUND_UP_ULL(parent_rate, i);
+		unsigned long delta = abs_diff(divided, rate);
+
+		if (delta < best_delta) {
+			best_delta = delta;
+			target_div = i - 1;
+		}
+	}
 
 	current_div = ccu_read(common, ctrl) >> div->shift;
 	current_div &= (1 << div->width) - 1;
