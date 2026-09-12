@@ -178,6 +178,7 @@ struct optee_ffa {
  * @dev:		device backing the RPMI TEE mailbox client
  * @nr_chan:		number of entries in @chan
  * @max_msg_data_size:	maximum RPMI message data size of the TEE channel
+ * @next_nonce:		monotonic nonce source for memory parcel creation
  * @mutex:		serializes access to @global_ids
  * @global_ids:		memory parcel id to tee_shm translation table
  *
@@ -191,6 +192,7 @@ struct optee_riscv {
 	struct device *dev;
 	unsigned int nr_chan;
 	u32 max_msg_data_size;
+	atomic_t next_nonce;
 	/* Serializes access to @global_ids */
 	struct mutex mutex;
 	struct rhashtable global_ids;

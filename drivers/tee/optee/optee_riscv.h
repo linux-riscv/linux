@@ -24,6 +24,7 @@
 #ifndef __OPTEE_RISCV_H
 #define __OPTEE_RISCV_H
 
+#include <linux/bits.h>
 #include <linux/mailbox/riscv-rpmi-message.h>
 #include <linux/types.h>
 
@@ -110,9 +111,13 @@ struct rpmi_tee_probe_features_resp {
 	{ 0x5b, 0xe1, 0xb1, 0xa0, 0x7e, 0x11, 0x4e, 0x7a,		\
 	  0x9b, 0x10, 0x00, 0x10, 0xc0, 0xff, 0xee, 0x00 }
 
-/* OP-TEE SMC-style call convention carried inside SERVICE_DATA. */
-#define RPMI_TEE_OPTEE_CALL_REGS	8	/* a0-a7 */
-#define RPMI_TEE_OPTEE_RESP_REGS	4	/* a0-a3 */
+/*
+ * OP-TEE FF-A direct message convention carried inside SERVICE_DATA:
+ * five command words each way, the RISC-V analog of the FF-A data0-data4
+ * (w3-w7) set of struct ffa_send_direct_data.
+ */
+#define RPMI_TEE_OPTEE_CALL_REGS	5
+#define RPMI_TEE_OPTEE_RESP_REGS	5
 
 #if __riscv_xlen == 64
 typedef __le64 rpmi_xlen_t;
@@ -137,5 +142,129 @@ struct rpmi_tee_call_resp {
 	__le32 service_rsp_len;
 	rpmi_xlen_t reg[RPMI_TEE_OPTEE_RESP_REGS];
 } __packed;
+
+/*
+ * OP-TEE message ABI carried inside the TEE_CALL SERVICE_DATA words.
+ *
+ * This mirrors the FF-A message ABI in <optee_ffa.h>: OP-TEE and the REE are
+ * peer endpoints and the argument struct optee_msg_arg is passed by shared
+ * memory handle (a parcel id) plus an offset, never by a register block. The
+ * SERVICE_DATA registers carry a small command word set that is the RISC-V
+ * analog of the FF-A w3-w7 register usage:
+ *
+ *   reg[0]: command / service id  (OPTEE_ABI_YIELDING_CALL_* below)
+ *   reg[1]: shared memory handle, lower 32 bits (parcel id)
+ *   reg[2]: shared memory handle, upper 32 bits (parcel nonce)
+ *   reg[3]: offset into the shared memory to the struct optee_msg_arg
+ *   reg[4]: not used on this call, resume info on OPTEE_ABI_YIELDING_CALL_RESUME
+ *
+ * On return the SERVICE_RSP registers carry:
+ *   reg[0]: error code, 0 on success
+ *   reg[1]: return code (OPTEE_ABI_YIELDING_CALL_RETURN_* below)
+ *   reg[2..3]: not used
+ *   reg[4]: RPC resume info
+ *
+ * These MUST byte-match the secure world OP-TEE header.
+ */
+#define OPTEE_ABI_BLOCKING_CALL(id)	(id)
+#define OPTEE_ABI_YIELDING_CALL_BIT	31
+#define OPTEE_ABI_YIELDING_CALL(id)	((id) | BIT(OPTEE_ABI_YIELDING_CALL_BIT))
+
+/* Blocking (fast) calls, mirror of OPTEE_FFA_BLOCKING_CALL ids. */
+#define OPTEE_ABI_GET_API_VERSION	OPTEE_ABI_BLOCKING_CALL(0)
+#define OPTEE_ABI_GET_OS_VERSION	OPTEE_ABI_BLOCKING_CALL(1)
+#define OPTEE_ABI_EXCHANGE_CAPABILITIES	OPTEE_ABI_BLOCKING_CALL(2)
+#define OPTEE_ABI_UNREGISTER_SHM	OPTEE_ABI_BLOCKING_CALL(3)
+#define OPTEE_ABI_ENABLE_ASYNC_NOTIF	OPTEE_ABI_BLOCKING_CALL(5)
+
+/* OP-TEE ABI version, mirror of OPTEE_FFA_VERSION_*. */
+#define OPTEE_ABI_VERSION_MAJOR		1
+#define OPTEE_ABI_VERSION_MINOR		0
+
+/* Capabilities returned by EXCHANGE_CAPABILITIES (OPTEE_FFA_SEC_CAP_* analog). */
+#define OPTEE_ABI_SEC_CAP_ARG_OFFSET	BIT(0)
+#define OPTEE_ABI_SEC_CAP_ASYNC_NOTIF	BIT(1)
+#define OPTEE_ABI_SEC_CAP_RPMB_PROBE	BIT(2)
+
+#define OPTEE_ABI_MAX_ASYNC_NOTIF_VALUE	64
+
+/* Yielding calls, mirror of OPTEE_FFA_YIELDING_CALL_*. */
+#define OPTEE_ABI_YIELDING_CALL_WITH_ARG	OPTEE_ABI_YIELDING_CALL(0)
+#define OPTEE_ABI_YIELDING_CALL_RESUME		OPTEE_ABI_YIELDING_CALL(1)
+
+#define OPTEE_ABI_YIELDING_CALL_RETURN_DONE		0
+#define OPTEE_ABI_YIELDING_CALL_RETURN_RPC_CMD		1
+#define OPTEE_ABI_YIELDING_CALL_RETURN_INTERRUPT	2
+
+/*
+ * Memory parcel wire encodings (RPMI spec section 4.16, Tables 198-207).
+ *
+ * A memory parcel is the RISC-V analog of an FF-A memory-share handle: the REE
+ * creates a parcel describing its pages and OP-TEE accepts it lazily by parcel
+ * id. All fields are little-endian uint32 words; block-list addresses are
+ * expressed in units of 4kB pages.
+ */
+
+/* Memory access encoding (Table 199). */
+#define RPMI_TEE_PARCEL_ACCESS_R	BIT(29)
+#define RPMI_TEE_PARCEL_ACCESS_W	BIT(30)
+#define RPMI_TEE_PARCEL_ACCESS_X	BIT(31)
+
+/* MEM_PARCEL_CREATE flags (Table 200). */
+#define RPMI_TEE_PARCEL_CREATE_FLAG_MULTI_SEGMENT	BIT(31)
+#define RPMI_TEE_PARCEL_CREATE_FLAG_OWNER_XFER		BIT(30)
+
+/* Length of the parcel LABEL field (Table 200). */
+#define RPMI_TEE_PARCEL_LABEL_LEN	16
+
+/*
+ * A block list entry covers a run of physically contiguous 4kB pages
+ * (Table 198):
+ *   BLOCK_HIGH = page-frame number [51:20]
+ *   BLOCK_LOW  = (page-frame number [19:0] << 12) | (page count - 1)
+ * so a single block spans at most 4096 pages (16MB).
+ */
+#define RPMI_TEE_PARCEL_BLOCK_MAX_PAGES	4096
+
+static inline __le32 rpmi_tee_block_high(u64 pfn)
+{
+	return cpu_to_le32((u32)(pfn >> 20));
+}
+
+static inline __le32 rpmi_tee_block_low(u64 pfn, u32 npages)
+{
+	return cpu_to_le32(((u32)(pfn & 0xfffff) << 12) | (npages - 1));
+}
+
+/*
+ * MEM_PARCEL_CREATE request (Table 200): a fixed header followed by
+ * receiver_id[receiver_cnt], access[receiver_cnt], block_high[block_cnt] and
+ * block_low[block_cnt].
+ */
+struct rpmi_tee_mem_parcel_create_req {
+	__le32 creator_id;
+	__le32 creator_access;
+	__le32 receiver_cnt;
+	__le32 flags;
+	__le32 nonce;
+	__le32 block_cnt;
+	u8 label[RPMI_TEE_PARCEL_LABEL_LEN];
+	__le32 data[];
+};
+
+struct rpmi_tee_mem_parcel_create_resp {
+	__le32 status;
+	__le32 mem_parcel_id;
+};
+
+/* MEM_PARCEL_RECLAIM request (Table 206) / response (Table 207). */
+struct rpmi_tee_mem_parcel_reclaim_req {
+	__le32 mem_parcel_id;
+};
+
+struct rpmi_tee_mem_parcel_reclaim_resp {
+	__le32 status;
+	__le32 flags;
+};
 
 #endif /* __OPTEE_RISCV_H */
