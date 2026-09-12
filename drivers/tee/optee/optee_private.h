@@ -171,6 +171,44 @@ struct optee_ffa {
 	struct work_struct notif_work;
 };
 
+/**
+ * struct optee_riscv - RPMI TEE communication struct
+ * @chan:		per-hart RPMI TEE service group mailbox channels
+ * @client:		RPMI mailbox client used to request @chan
+ * @dev:		device backing the RPMI TEE mailbox client
+ * @nr_chan:		number of entries in @chan
+ * @max_msg_data_size:	maximum RPMI message data size of the TEE channel
+ * @next_nonce:		monotonic nonce source for memory parcel creation
+ * @mutex:		serializes access to @global_ids
+ * @global_ids:		memory parcel id to tee_shm translation table
+ * @notif_wq:		workqueue for signal-bus asynchronous notification
+ * @notif_work:		work for signal-bus asynchronous notification
+ * @signal_irq:		availability doorbell IRQ, or 0 if async notif unused
+ * @sender_signals:	number of signals OP-TEE may raise to the REE
+ * @bottom_half_value:	signal value that requests an RPC bottom half, or
+ *			U32_MAX if async notif is unused
+ *
+ * This is the RISC-V analog of struct optee_ffa: communication with secure
+ * world OP-TEE OS rides the RPMI TEE service group (RPMI spec section 4.16)
+ * over the SBI MPXY mailbox instead of Arm FF-A.
+ */
+struct optee_riscv {
+	struct mbox_chan **chan;
+	struct mbox_client *client;
+	struct device *dev;
+	unsigned int nr_chan;
+	u32 max_msg_data_size;
+	atomic_t next_nonce;
+	/* Serializes access to @global_ids */
+	struct mutex mutex;
+	struct rhashtable global_ids;
+	struct workqueue_struct *notif_wq;
+	struct work_struct notif_work;
+	unsigned int signal_irq;
+	u32 sender_signals;
+	u32 bottom_half_value;
+};
+
 struct optee;
 
 /**
@@ -231,6 +269,7 @@ struct optee_ops {
  * @ctx:			driver internal TEE context
  * @smc:			specific to SMC ABI
  * @ffa:			specific to FF-A ABI
+ * @riscv:			specific to RPMI TEE ABI
  * @shm_arg_cache:		shared memory cache argument
  * @call_queue:			queue of threads waiting to call @invoke_fn
  * @notif:			notification synchronization struct
@@ -259,6 +298,7 @@ struct optee {
 	union {
 		struct optee_smc smc;
 		struct optee_ffa ffa;
+		struct optee_riscv riscv;
 	};
 	struct optee_shm_arg_cache shm_arg_cache;
 	struct optee_call_queue call_queue;
@@ -426,5 +466,12 @@ int optee_smc_abi_register(void);
 void optee_smc_abi_unregister(void);
 int optee_ffa_abi_register(void);
 void optee_ffa_abi_unregister(void);
+#ifdef CONFIG_RISCV_SBI_MPXY_MBOX
+int optee_riscv_abi_register(void);
+void optee_riscv_abi_unregister(void);
+#else
+static inline int optee_riscv_abi_register(void) { return -EOPNOTSUPP; }
+static inline void optee_riscv_abi_unregister(void) { }
+#endif
 
 #endif /*OPTEE_PRIVATE_H*/
