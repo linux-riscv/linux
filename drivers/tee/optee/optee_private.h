@@ -181,6 +181,12 @@ struct optee_ffa {
  * @next_nonce:		monotonic nonce source for memory parcel creation
  * @mutex:		serializes access to @global_ids
  * @global_ids:		memory parcel id to tee_shm translation table
+ * @notif_wq:		workqueue for signal-bus asynchronous notification
+ * @notif_work:		work for signal-bus asynchronous notification
+ * @signal_irq:		availability doorbell IRQ, or 0 if async notif unused
+ * @sender_signals:	number of signals OP-TEE may raise to the REE
+ * @bottom_half_value:	signal value that requests an RPC bottom half, or
+ *			U32_MAX if async notif is unused
  *
  * This is the RISC-V analog of struct optee_ffa: communication with secure
  * world OP-TEE OS rides the RPMI TEE service group (RPMI spec section 4.16)
@@ -196,6 +202,11 @@ struct optee_riscv {
 	/* Serializes access to @global_ids */
 	struct mutex mutex;
 	struct rhashtable global_ids;
+	struct workqueue_struct *notif_wq;
+	struct work_struct notif_work;
+	unsigned int signal_irq;
+	u32 sender_signals;
+	u32 bottom_half_value;
 };
 
 struct optee;

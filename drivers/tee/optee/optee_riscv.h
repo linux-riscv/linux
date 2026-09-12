@@ -82,6 +82,70 @@ enum rpmi_tee_feature_id {
 #define RPMI_TEE_MEMORY_SHARE_TEE_ONLY		1
 #define RPMI_TEE_MEMORY_SHARE_FULL		2
 
+/*
+ * SIGNAL_BUS feature word encoding (RPMI spec Table 182, feature id 4).
+ *
+ * The TEE service group defines no framework notification events
+ * (RPMI spec section 4.16.2), so asynchronous notification from OP-TEE rides
+ * the signal bus (services 0x05-0x08) instead. The SIGNAL_BUS feature word
+ * describes both how the availability doorbell is delivered and the shape of
+ * the bus:
+ *   [1:0]   transport: 0 unsupported, 1 System MSI, 2 System IRQ
+ *   [11:2]  maximum bus width (number of signals per endpoint pair)
+ *   [31:12] System MSI index or System IRQ index of the availability doorbell
+ */
+#define RPMI_TEE_SIGNAL_BUS_TRANSPORT(v)	((v) & GENMASK(1, 0))
+#define RPMI_TEE_SIGNAL_BUS_WIDTH(v)		(((v) & GENMASK(11, 2)) >> 2)
+#define RPMI_TEE_SIGNAL_BUS_INDEX(v)		(((v) & GENMASK(31, 12)) >> 12)
+
+#define RPMI_TEE_SIGNAL_BUS_NONE		0
+#define RPMI_TEE_SIGNAL_BUS_MSI			1
+#define RPMI_TEE_SIGNAL_BUS_SYSIRQ		2
+
+/*
+ * Signal bus wire encodings (RPMI spec section 4.16.7-4.16.10,
+ * Tables 190-197). The bus is always set up by the REE; signals
+ * 0 <= x < sender_signals are raised by the target (OP-TEE) and read by us.
+ */
+struct rpmi_tee_signal_bus_setup_req {
+	__le32 target_id;
+	__le32 bus_width;
+	__le32 sender_signals;
+};
+
+struct rpmi_tee_signal_bus_setup_resp {
+	__le32 status;
+};
+
+struct rpmi_tee_signal_bus_teardown_req {
+	__le32 target_id;
+};
+
+struct rpmi_tee_signal_bus_teardown_resp {
+	__le32 status;
+};
+
+/* TEE_SIGNAL_RETRIEVE response (Table 197); request carries no data. */
+#define RPMI_TEE_SIGNAL_RETRIEVE_MORE_AVAILABLE	BIT(31)
+
+struct rpmi_tee_signal_retrieve_resp {
+	__le32 status;
+	__le32 flags;
+	__le32 target_id;
+	__le32 signal_len;
+	__le32 signal[];
+};
+
+/*
+ * Asynchronous notification signal assignment (frozen contract with secure
+ * world OP-TEE). A raised signal value is the OP-TEE async notification key
+ * verbatim: values 0 <= x < OPTEE_ABI_MAX_ASYNC_NOTIF_VALUE are delivered to
+ * optee_notif_send(), and the reserved top value requests an RPC bottom half.
+ * The bus is therefore sized one wider than the maximum notification value.
+ */
+#define OPTEE_ABI_ASYNC_NOTIF_BOTTOM_HALF	OPTEE_ABI_MAX_ASYNC_NOTIF_VALUE
+#define OPTEE_ABI_ASYNC_NOTIF_BUS_WIDTH		(OPTEE_ABI_MAX_ASYNC_NOTIF_VALUE + 1)
+
 /* TEE_PROBE_FEATURES request (Table 183) / response (Table 184). */
 struct rpmi_tee_probe_features_req {
 	__le32 feature_id;

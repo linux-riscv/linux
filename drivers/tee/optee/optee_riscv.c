@@ -28,6 +28,7 @@
 
 #include <linux/atomic.h>
 #include <linux/errno.h>
+#include <linux/interrupt.h>
 #include <linux/mailbox_client.h>
 #include <linux/mailbox/riscv-rpmi-message.h>
 #include <linux/mm.h>
@@ -45,6 +46,9 @@
 #include "optee_private.h"
 #include "optee_riscv.h"
 #include "optee_rpc_cmd.h"
+
+static int optee_riscv_probe_feature(struct optee *optee, u32 feature_id,
+				     u32 *value);
 
 /*
  * Low level RPMI TEE service group transport over the SBI MPXY mailbox.
@@ -853,6 +857,242 @@ static int optee_riscv_do_call_with_arg(struct tee_context *ctx,
 }
 
 /*
+ * 5b. Asynchronous notification over the signal bus
+ *
+ * The TEE service group defines no framework notification events (RPMI spec
+ * section 4.16.2), so OP-TEE signals the REE asynchronously over the signal
+ * bus (services 0x05-0x08). This is the RISC-V analog of the FF-A
+ * notification path (optee_ffa_async_notif_init / notif_callback): OP-TEE
+ * raises a signal, the framework rings an availability doorbell delivered as
+ * a System MSI or System IRQ, and the REE retrieves the pending signals with
+ * TEE_SIGNAL_RETRIEVE. A retrieved signal value is the OP-TEE async
+ * notification key; the reserved top value requests an RPC bottom half.
+ */
+
+static void notif_work_fn(struct work_struct *work)
+{
+	struct optee_riscv *optee_riscv = container_of(work, struct optee_riscv,
+						       notif_work);
+	struct optee *optee = container_of(optee_riscv, struct optee, riscv);
+
+	optee_do_bottom_half(optee->ctx);
+}
+
+/*
+ * Drain all pending signals from the framework and dispatch them. Returns
+ * true if an RPC bottom half was requested by OP-TEE. TEE_SIGNAL_RETRIEVE
+ * returns the signals of one bus per call and sets MORE_AVAILABLE while other
+ * buses still have pending signals, so loop until it is clear.
+ */
+static bool optee_riscv_retrieve_signals(struct optee *optee)
+{
+	bool do_bottom_half = false;
+	size_t max_signals = optee->riscv.sender_signals;
+	struct rpmi_tee_signal_retrieve_resp *rx;
+	struct rpmi_mbox_message msg;
+	size_t rx_len;
+	u32 flags;
+
+	rx_len = struct_size(rx, signal, max_signals);
+	rx = kzalloc(rx_len, GFP_KERNEL);
+	if (!rx)
+		return false;
+
+	do {
+		u32 status, n, i;
+
+		rpmi_mbox_init_send_with_response(&msg,
+						  RPMI_TEE_SRV_SIGNAL_RETRIEVE,
+						  NULL, 0, rx, rx_len);
+		if (optee_riscv_send(optee, &msg))
+			break;
+
+		status = le32_to_cpu(rx->status);
+		if (status == (u32)RPMI_ERR_NO_DATA)
+			break;
+		if (status)
+			break;
+
+		n = min_t(u32, le32_to_cpu(rx->signal_len), max_signals);
+		for (i = 0; i < n; i++) {
+			u32 value = le32_to_cpu(rx->signal[i]);
+
+			if (value == OPTEE_ABI_ASYNC_NOTIF_BOTTOM_HALF)
+				do_bottom_half = true;
+			else
+				optee_notif_send(optee, value);
+		}
+
+		flags = le32_to_cpu(rx->flags);
+	} while (flags & RPMI_TEE_SIGNAL_RETRIEVE_MORE_AVAILABLE);
+
+	kfree(rx);
+
+	return do_bottom_half;
+}
+
+static irqreturn_t notif_irq_handler(int irq, void *dev_id)
+{
+	struct optee *optee = dev_id;
+
+	if (optee_riscv_retrieve_signals(optee))
+		queue_work(optee->riscv.notif_wq, &optee->riscv.notif_work);
+
+	return IRQ_HANDLED;
+}
+
+/*
+ * Arm the OP-TEE asynchronous notification subsystem (OPTEE_ABI_ENABLE_ASYNC_NOTIF
+ * blocking call, the mirror of FF-A's OPTEE_FFA_ENABLE_ASYNC_NOTIF). The reserved
+ * bottom-half signal value is handed to OP-TEE so that a raise of that value is
+ * understood as a request to run the driver bottom half rather than as a plain
+ * notification key.
+ */
+static int optee_riscv_enable_async_notif(struct optee *optee)
+{
+	u64 in[RPMI_TEE_OPTEE_CALL_REGS] = { OPTEE_ABI_ENABLE_ASYNC_NOTIF,
+		      optee->riscv.bottom_half_value };
+	u64 out[RPMI_TEE_OPTEE_RESP_REGS] = { };
+	int rc;
+
+	rc = optee_riscv_tee_call(optee, in, out);
+	if (rc)
+		return rc;
+	if (out[0])
+		return -EINVAL;
+
+	return 0;
+}
+
+/*
+ * Set up the signal bus with OP-TEE (TEE_SIGNAL_BUS_SETUP, service 0x05) and
+ * request the availability doorbell IRQ. The bus must be set up by the REE
+ * (RPMI spec section 4.16.7) and is sized so every OP-TEE async notification
+ * value, plus the reserved bottom-half value, maps to a distinct signal that
+ * OP-TEE may raise.
+ */
+static int optee_riscv_setup_signal_bus(struct optee *optee)
+{
+	struct rpmi_tee_signal_bus_setup_req tx = {
+		.target_id = cpu_to_le32(RPMI_TEE_ENDPOINT_OPTEE),
+		.bus_width = cpu_to_le32(OPTEE_ABI_ASYNC_NOTIF_BUS_WIDTH),
+		/*
+		 * SENDER_SIGNALS (RPMI spec Table 190) is the number of signals
+		 * reserved for us, the sender, to receive: signals 0 <= x < N
+		 * are raised by the target (OP-TEE) and read by us. We only
+		 * ever receive notifications from OP-TEE and never raise any, so
+		 * reserve the whole bus for OP-TEE to raise.
+		 */
+		.sender_signals = cpu_to_le32(OPTEE_ABI_ASYNC_NOTIF_BUS_WIDTH),
+	};
+	struct rpmi_tee_signal_bus_setup_resp rx = { };
+	struct rpmi_mbox_message msg;
+	int ret;
+
+	rpmi_mbox_init_send_with_response(&msg, RPMI_TEE_SRV_SIGNAL_BUS_SETUP,
+					  &tx, sizeof(tx), &rx, sizeof(rx));
+	ret = optee_riscv_send(optee, &msg);
+	if (ret)
+		return ret;
+	if (rx.status)
+		return rpmi_to_linux_error(le32_to_cpu(rx.status));
+
+	return 0;
+}
+
+static void optee_riscv_teardown_signal_bus(struct optee *optee)
+{
+	struct rpmi_tee_signal_bus_teardown_req tx = {
+		.target_id = cpu_to_le32(RPMI_TEE_ENDPOINT_OPTEE),
+	};
+	struct rpmi_tee_signal_bus_teardown_resp rx = { };
+	struct rpmi_mbox_message msg;
+
+	rpmi_mbox_init_send_with_response(&msg,
+					  RPMI_TEE_SRV_SIGNAL_BUS_TEARDOWN,
+					  &tx, sizeof(tx), &rx, sizeof(rx));
+	optee_riscv_send(optee, &msg);
+}
+
+/*
+ * Discover and enable asynchronous notification. Probe the SIGNAL_BUS
+ * feature word: bits [1:0] give the doorbell transport (System MSI or System
+ * IRQ), [11:2] the maximum bus width and [31:12] the doorbell index. On this
+ * platform the doorbell is wired to the platform device as its interrupt, so
+ * the index is resolved through the DT and requested with platform_get_irq().
+ */
+static int optee_riscv_async_notif_init(struct platform_device *pdev,
+					struct optee *optee)
+{
+	u32 feat = 0;
+	int irq, rc;
+
+	rc = optee_riscv_probe_feature(optee, RPMI_TEE_FEAT_SIGNAL_BUS, &feat);
+	if (rc)
+		return rc;
+
+	if (RPMI_TEE_SIGNAL_BUS_TRANSPORT(feat) == RPMI_TEE_SIGNAL_BUS_NONE)
+		return -EOPNOTSUPP;
+	if (RPMI_TEE_SIGNAL_BUS_WIDTH(feat) < OPTEE_ABI_ASYNC_NOTIF_BUS_WIDTH)
+		return -EOPNOTSUPP;
+
+	irq = platform_get_irq_optional(pdev, 0);
+	if (irq < 0)
+		return irq;
+
+	INIT_WORK(&optee->riscv.notif_work, notif_work_fn);
+	optee->riscv.notif_wq = create_workqueue("optee_notification");
+	if (!optee->riscv.notif_wq) {
+		rc = -ENOMEM;
+		goto err;
+	}
+
+	optee->riscv.sender_signals = OPTEE_ABI_ASYNC_NOTIF_BUS_WIDTH;
+
+	rc = optee_riscv_setup_signal_bus(optee);
+	if (rc)
+		goto err_wq;
+
+	rc = request_threaded_irq(irq, NULL, notif_irq_handler, IRQF_ONESHOT,
+				  "optee_notification", optee);
+	if (rc)
+		goto err_bus;
+	optee->riscv.signal_irq = irq;
+	optee->riscv.bottom_half_value = OPTEE_ABI_ASYNC_NOTIF_BOTTOM_HALF;
+
+	rc = optee_riscv_enable_async_notif(optee);
+	if (rc)
+		goto err_irq;
+
+	return 0;
+
+err_irq:
+	free_irq(irq, optee);
+	optee->riscv.signal_irq = 0;
+err_bus:
+	optee_riscv_teardown_signal_bus(optee);
+err_wq:
+	destroy_workqueue(optee->riscv.notif_wq);
+	optee->riscv.notif_wq = NULL;
+err:
+	optee->riscv.sender_signals = 0;
+	optee->riscv.bottom_half_value = U32_MAX;
+
+	return rc;
+}
+
+static void optee_riscv_async_notif_uninit(struct optee *optee)
+{
+	if (optee->riscv.bottom_half_value == U32_MAX)
+		return;
+
+	free_irq(optee->riscv.signal_irq, optee);
+	optee_riscv_teardown_signal_bus(optee);
+	destroy_workqueue(optee->riscv.notif_wq);
+	optee->riscv.notif_wq = NULL;
+}
+
+/*
  * 6. Driver initialization
  *
  * During driver initialization the OP-TEE Trusted OS is probed over TEE_CALL
@@ -1238,6 +1478,7 @@ static int optee_riscv_probe(struct platform_device *pdev)
 
 	optee->ops = &optee_riscv_ops;
 	optee->rpc_param_count = rpc_param_count;
+	optee->riscv.bottom_half_value = U32_MAX;
 
 	if (IS_REACHABLE(CONFIG_RPMB) &&
 	    (sec_caps & OPTEE_ABI_SEC_CAP_RPMB_PROBE))
@@ -1291,6 +1532,13 @@ static int optee_riscv_probe(struct platform_device *pdev)
 	if (rc)
 		goto err_close_ctx;
 
+	if (sec_caps & OPTEE_ABI_SEC_CAP_ASYNC_NOTIF) {
+		rc = optee_riscv_async_notif_init(pdev, optee);
+		if (rc)
+			dev_warn(dev, "Failed to initialize async notifications: %d\n",
+				 rc);
+	}
+
 	rc = optee_enumerate_devices(PTA_CMD_GET_DEVICES);
 	if (rc)
 		goto err_unregister_devices;
@@ -1306,6 +1554,7 @@ static int optee_riscv_probe(struct platform_device *pdev)
 
 err_unregister_devices:
 	optee_unregister_devices();
+	optee_riscv_async_notif_uninit(optee);
 	optee_notif_uninit(optee);
 err_close_ctx:
 	teedev_close_context(ctx);
@@ -1333,6 +1582,8 @@ err_free_optee:
 static void optee_riscv_remove(struct platform_device *pdev)
 {
 	struct optee *optee = platform_get_drvdata(pdev);
+
+	optee_riscv_async_notif_uninit(optee);
 
 	optee_remove_common(optee);
 
