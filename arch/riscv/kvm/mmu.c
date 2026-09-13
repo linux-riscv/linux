@@ -19,6 +19,8 @@
 static bool __read_mostly eager_page_split = true;
 module_param(eager_page_split, bool, 0644);
 
+static void mmu_recover_huge_pages(struct kvm *kvm, int slot);
+
 static void mmu_wp_memory_region(struct kvm *kvm, int slot)
 {
 	struct kvm_memslots *slots = kvm_memslots(kvm);
@@ -241,17 +243,44 @@ void kvm_arch_commit_memory_region(struct kvm *kvm,
 				const struct kvm_memory_slot *new,
 				enum kvm_mr_change change)
 {
+	bool log_dirty_pages = new && new->flags & KVM_MEM_LOG_DIRTY_PAGES;
+
 	/*
 	 * At this point memslot has been committed and dirty pages will be
 	 * tracked while the memory slot is write protected.
 	 */
-	if (change != KVM_MR_DELETE && new->flags & KVM_MEM_LOG_DIRTY_PAGES) {
+	if (log_dirty_pages) {
+		if (change == KVM_MR_DELETE)
+			return;
+
 		if (kvm_dirty_log_manual_protect_and_init_set(kvm))
 			return;
+
 		mmu_wp_memory_region(kvm, new->id);
 
 		if (READ_ONCE(eager_page_split))
 			mmu_split_memory_region(kvm, new->id);
+
+	} else {
+		/*
+		 * Only when change == KVM_MR_FLAGS_ONLY, this branch handles the
+		 * disable-dirty-log case. For other changes (KVM_MR_CREATE,
+		 * KVM_MR_DELETE, KVM_MR_MOVE), there is no need to recover
+		 * huge pages.
+		 */
+		if (change != KVM_MR_FLAGS_ONLY)
+			return;
+
+		/*
+		 * Recover huge page mappings in the slot now that dirty logging
+		 * is disabled, i.e. now that KVM does not have to track guest
+		 * writes at 4KiB granularity.
+		 *
+		 * Dirty logging might be disabled by userspace if an ongoing VM
+		 * live migration is cancelled and the VM must continue running
+		 * on the source.
+		 */
+		mmu_recover_huge_pages(kvm, new->id);
 	}
 }
 
@@ -809,4 +838,100 @@ void kvm_riscv_mmu_update_hgatp(struct kvm_vcpu *vcpu)
 
 	if (!kvm_riscv_gstage_vmid_bits())
 		kvm_riscv_local_hfence_gvma_all();
+}
+
+static unsigned long mmu_recover_huge_pages_range(struct kvm_gstage *gstage,
+						  unsigned long page_size,
+						  gpa_t range_start,
+						  gpa_t range_end)
+{
+	phys_addr_t start = range_start;
+	phys_addr_t end = range_end;
+	unsigned long out_sz = 0;
+	bool recovered = true;
+
+	/*
+	 *  Recover 2MB hugepages mapping within the range.
+	 */
+	while (start < end) {
+		recovered &= kvm_riscv_gstage_recover_huge(gstage, start,
+							   PMD_SIZE, &out_sz);
+		start += out_sz;
+	}
+
+	/*
+	 * If 1GB hugepages are desired, try to recover the whole range
+	 * as one 1GB hugepages mapping.
+	 */
+	if (recovered && (page_size == PUD_SIZE)) {
+		start = range_start;
+		kvm_riscv_gstage_recover_huge(gstage, start, PUD_SIZE, &out_sz);
+	}
+
+	return out_sz;
+}
+
+static void mmu_recover_huge_pages(struct kvm *kvm, int slot)
+{
+	struct kvm_memslots *slots = kvm_memslots(kvm);
+	struct kvm_memory_slot *memslot = id_to_memslot(slots, slot);
+	unsigned long hva = gfn_to_hva(kvm, memslot->base_gfn);
+	phys_addr_t start = memslot->base_gfn << PAGE_SHIFT;
+	phys_addr_t end = (memslot->base_gfn + memslot->npages) << PAGE_SHIFT;
+	phys_addr_t addr = start;
+	struct kvm_gstage gstage;
+	unsigned long page_size;
+	unsigned long out_size;
+	phys_addr_t range_start;
+	phys_addr_t range_end;
+
+	if (!(fault_supports_gstage_huge_mapping(memslot, hva, PMD_SIZE) ||
+	    fault_supports_gstage_huge_mapping(memslot, hva, PUD_SIZE)))
+		return;
+
+	kvm_riscv_gstage_init(&gstage, kvm);
+
+	write_lock(&kvm->mmu_lock);
+
+	while (addr < end) {
+		/*
+		 * If a very large memslot is mapped exclusively with
+		 * 4KB host pages, or too many hugepages need to recover,
+		 * release the kvm->mmu_lock to prevent starvation and
+		 * lockup detector warnings.
+		 */
+		cond_resched_rwlock_write(&kvm->mmu_lock);
+
+		if (!kvm->arch.pgd)
+			break;
+
+		hva = gfn_to_hva(kvm, addr >> PAGE_SHIFT);
+		page_size = get_hva_mapping_size(kvm, hva);
+		if (page_size == PAGE_SIZE) {
+			addr += page_size;
+			continue;
+		}
+
+		range_start = ALIGN_DOWN(addr, page_size);
+		range_end = range_start + page_size;
+
+		/*
+		 * Make sure the recover range [range_start, range_end)
+		 * is within the slot range.
+		 */
+		if (range_start < start || range_end > end) {
+			addr = range_end;
+			continue;
+		}
+
+		out_size = mmu_recover_huge_pages_range(&gstage, page_size,
+							range_start, range_end);
+
+		if (out_size > page_size)
+			page_size = out_size;
+
+		addr = range_start + page_size;
+	}
+
+	write_unlock(&kvm->mmu_lock);
 }
