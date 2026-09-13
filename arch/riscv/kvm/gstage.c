@@ -369,6 +369,73 @@ bool kvm_riscv_gstage_split_huge(struct kvm_gstage *gstage,
 	return need_flush;
 }
 
+static inline unsigned long make_huge_pte(unsigned long child_pte, int index,
+					  unsigned long child_page_size)
+{
+	unsigned long huge_pte = child_pte;
+	unsigned long child_pfn_offset;
+
+	child_pfn_offset = index * (child_page_size / PAGE_SIZE);
+	huge_pte -= pte_val(pfn_pte(child_pfn_offset, __pgprot(0)));
+
+	return huge_pte;
+}
+
+bool kvm_riscv_gstage_recover_huge(struct kvm_gstage *gstage, gpa_t addr,
+				   unsigned long target_page_size,
+				   unsigned long *page_size)
+{
+	u32 current_level = gstage->pgd_levels - 1;
+	pte_t *next_ptep = (pte_t *)gstage->pgd;
+	u32 target_level, out_level;
+	pte_t *ptep, *child_ptep;
+	unsigned long huge_pte;
+	bool recovered = false;
+	int ret, i;
+
+	out_level = 0;
+	ret = gstage_page_size_to_level(gstage, target_page_size, &target_level);
+	if (ret)
+		goto out;
+
+	while (current_level >= target_level) {
+		ptep = (pte_t *)&next_ptep[gstage_pte_index(gstage, addr, current_level)];
+
+		out_level = current_level;
+		if (!pte_val(ptep_get(ptep)))
+			goto out;
+
+		/* The mapping is already a huge page mapping. */
+		if (gstage_pte_leaf(ptep)) {
+			recovered = true;
+			goto out;
+		}
+
+		next_ptep = (pte_t *)gstage_pte_page_vaddr(ptep_get(ptep));
+		current_level--;
+	}
+
+	for (i = 0; i < PTRS_PER_PTE; i++) {
+		child_ptep = (pte_t *)&next_ptep[i];
+		if (!gstage_pte_leaf(child_ptep))
+			continue;
+
+		huge_pte = make_huge_pte(pte_val(ptep_get(child_ptep)),
+					 i, target_page_size / PTRS_PER_PTE);
+		set_pte(ptep, __pte(huge_pte));
+		gstage_tlb_flush(gstage, target_level, addr);
+		put_page(virt_to_page(next_ptep));
+		recovered = true;
+
+		break;
+	}
+
+out:
+	gstage_level_to_page_size(gstage, out_level, page_size);
+
+	return recovered;
+}
+
 bool kvm_riscv_gstage_op_pte(struct kvm_gstage *gstage, gpa_t addr,
 			     pte_t *ptep, u32 ptep_level, enum kvm_riscv_gstage_op op)
 {
