@@ -110,6 +110,21 @@ HOSTLDLIBS
 ----------
 Additional libraries to link against when building host programs.
 
+KGZIP
+-----
+The gzip compressor used for the compressed kernel image, compressed
+modules and packaging.
+
+Defaults to pigz (a parallel implementation of gzip) if it is available,
+otherwise gzip. Set ``KGZIP=`` on the make command line to use another
+program. Modules are compressed one per make job, so pigz is limited to a
+single thread there.
+
+KBZIP2, KLZOP, LZMA, LZ4, XZ, ZSTD
+----------------------------------
+The compressor programs for the other formats. Each defaults to the program
+of the same name.
+
 .. _userkbuildflags:
 
 USERCFLAGS
@@ -133,6 +148,13 @@ Set the kbuild verbosity. Can be assigned same values as "V=...".
 See make help for the full list.
 
 Setting "V=..." takes precedence over KBUILD_VERBOSE.
+
+KBUILD_RUST_THREADS
+-------------------
+The number of threads rustc's parallel front end may use, passed to it as
+``-Zthreads``. Unset by default, as the parallel front end is not yet
+stable and its output is not reproducible. The gain levels off at 8
+threads.
 
 KBUILD_EXTMOD
 -------------
