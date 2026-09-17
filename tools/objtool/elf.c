@@ -316,45 +316,165 @@ struct symbol *find_global_symbol_by_name(const struct elf *elf, const char *nam
 	return NULL;
 }
 
-/* If there are multiple matches, return the first one in the range */
+static bool is_dwarf_section(struct section *sec)
+{
+	return !strncmp(sec->name, ".debug_", 7);
+}
+
+/* Index the first relocation at or after each 64 byte window of the base. */
+#define RELOC_CACHE_INDEX_SHIFT	6
+
+static unsigned long reloc_cache_index(unsigned long offset)
+{
+	return offset >> RELOC_CACHE_INDEX_SHIFT;
+}
+
+static void reloc_cache_free(struct section *rsec)
+{
+	free(rsec->reloc_cache);
+	rsec->reloc_cache = NULL;
+	rsec->nr_cache_windows = 0;
+	rsec->nr_indexed = 0;
+	rsec->sorted = false;
+}
+
+/* Grow the index to cover the base section, new windows start past the end. */
+static int reloc_cache_resize(struct section *rsec)
+{
+	const unsigned int nr_windows = reloc_cache_index(sec_size(rsec->base)) + 1;
+	unsigned int *cache;
+
+	if (nr_windows <= rsec->nr_cache_windows)
+		return 0;
+
+	cache = realloc(rsec->reloc_cache, nr_windows * sizeof(*cache));
+	if (!cache) {
+		ERROR_GLIBC("realloc");
+		return -1;
+	}
+
+	while (rsec->nr_cache_windows < nr_windows)
+		cache[rsec->nr_cache_windows++] = rsec->nr_indexed;
+	rsec->reloc_cache = cache;
+
+	return 0;
+}
+
+/*
+ * Index the next relocation. It must follow the previous one in position and
+ * offset, otherwise the section is scanned from now on.
+ */
+static int reloc_cache_add(struct section *rsec, unsigned int reloc_idx)
+{
+	const unsigned long offset = reloc_offset(&rsec->relocs[reloc_idx]);
+	const unsigned long window = reloc_cache_index(offset);
+	unsigned long first_window = 0;
+
+	if (reloc_idx != rsec->nr_indexed)
+		goto unsorted;
+
+	if (reloc_idx) {
+		const unsigned long prev = reloc_offset(&rsec->relocs[reloc_idx - 1]);
+
+		if (offset < prev)
+			goto unsorted;
+		first_window = reloc_cache_index(prev) + 1;
+	}
+
+	if (reloc_cache_resize(rsec))
+		return -1;
+	if (window >= rsec->nr_cache_windows)
+		goto unsorted;
+
+	while (first_window <= window)
+		rsec->reloc_cache[first_window++] = reloc_idx;
+	rsec->nr_indexed = reloc_idx + 1;
+
+	return 0;
+
+unsorted:
+	reloc_cache_free(rsec);
+	return 0;
+}
+
+static int init_reloc_cache(struct section *rsec)
+{
+	const unsigned int nr_relocs = sec_num_entries(rsec);
+	unsigned int reloc_idx;
+
+	rsec->sorted = true;
+	for (reloc_idx = 0; reloc_idx < nr_relocs; reloc_idx++) {
+		if (reloc_cache_add(rsec, reloc_idx))
+			return -1;
+		if (!rsec->sorted)
+			break;
+	}
+
+	return 0;
+}
+
+static bool reloc_in_range(struct reloc *reloc, unsigned long offset,
+			   unsigned int len)
+{
+	return reloc_offset(reloc) >= offset && reloc_offset(reloc) < offset + len;
+}
+
+/* The index gives a lower bound, scan on from there. */
+static struct reloc *find_reloc_sorted(struct section *rsec,
+				       unsigned long offset, unsigned int len)
+{
+	const unsigned long cache_idx = reloc_cache_index(offset);
+	unsigned int reloc_idx;
+
+	if (cache_idx >= rsec->nr_cache_windows)
+		return NULL;
+
+	for (reloc_idx = rsec->reloc_cache[cache_idx];
+	     reloc_idx < rsec->nr_indexed; reloc_idx++) {
+		struct reloc *reloc = &rsec->relocs[reloc_idx];
+
+		if (reloc_offset(reloc) >= offset)
+			return reloc_in_range(reloc, offset, len) ? reloc : NULL;
+	}
+
+	return NULL;
+}
+
+/* Out of order sections, only ever DWARF or one objtool grew that way. */
+static struct reloc *find_reloc_linear(struct section *rsec,
+				       unsigned long offset, unsigned int len)
+{
+	struct reloc *reloc, *first = NULL;
+
+	for_each_reloc(rsec, reloc) {
+		if (!reloc->sec || !reloc_in_range(reloc, offset, len))
+			continue;
+
+		if (!first || reloc_offset(reloc) < reloc_offset(first))
+			first = reloc;
+	}
+
+	return first;
+}
+
+/* If there are multiple matches, return the first one in the range. */
 struct reloc *find_reloc_by_dest_range(const struct elf *elf, struct section *sec,
 				       unsigned long offset, unsigned int len)
 {
-	struct reloc *reloc, *r = NULL;
-	struct section *rsec;
-	unsigned long o;
+	struct section *rsec = sec->rsec;
 
-	rsec = sec->rsec;
 	if (!rsec)
 		return NULL;
 
-	for_offset_range(o, offset, offset + len) {
-		elf_hash_for_each_possible(elf, reloc, reloc, hash,
-					   sec_offset_hash(rsec, o)) {
-			if (reloc->sec != rsec)
-				continue;
+	if (rsec->sorted)
+		return find_reloc_sorted(rsec, offset, len);
 
-			if (reloc_offset(reloc) >= offset &&
-			    reloc_offset(reloc) < offset + len) {
-				if (!r || reloc_offset(reloc) < reloc_offset(r))
-					r = reloc;
-			}
-		}
-		if (r && (reloc_offset(r) & OFFSET_STRIDE_MASK) == o)
-			return r;
-	}
-
-	return r;
+	return find_reloc_linear(rsec, offset, len);
 }
 
 struct reloc *find_reloc_by_dest(const struct elf *elf, struct section *sec, unsigned long offset)
 {
 	return find_reloc_by_dest_range(elf, sec, offset, 1);
-}
-
-static bool is_dwarf_section(struct section *sec)
-{
-	return !strncmp(sec->name, ".debug_", 7);
 }
 
 static int read_sections(struct elf *elf)
@@ -1071,7 +1191,8 @@ struct reloc *elf_init_reloc(struct elf *elf, struct section *rsec,
 	set_reloc_type(elf, reloc, type);
 	set_reloc_addend(elf, reloc, addend);
 
-	elf_hash_add(reloc, &reloc->hash, reloc_hash(reloc));
+	if (rsec->sorted && reloc_cache_add(rsec, reloc_idx))
+		return NULL;
 	set_sym_next_reloc(reloc, sym->relocs);
 	sym->relocs = reloc;
 
@@ -1125,15 +1246,12 @@ struct reloc *elf_init_reloc_data_sym(struct elf *elf, struct section *sec,
 
 static int read_relocs(struct elf *elf)
 {
-	unsigned long nr_reloc, max_reloc = 0;
+	unsigned long nr_reloc, max_reloc = 0, nr_linear = 0;
 	struct section *rsec;
 	struct reloc *reloc;
 	unsigned int symndx;
 	struct symbol *sym;
 	int i;
-
-	if (!elf_alloc_hash(reloc, elf->num_relocs))
-		return -1;
 
 	list_for_each_entry(rsec, &elf->sections, list) {
 		if (!is_reloc_sec(rsec))
@@ -1168,19 +1286,26 @@ static int read_relocs(struct elf *elf)
 				return -1;
 			}
 
-			elf_hash_add(reloc, &reloc->hash, reloc_hash(reloc));
 			set_sym_next_reloc(reloc, sym->relocs);
 			sym->relocs = reloc;
 
 			nr_reloc++;
 		}
 		max_reloc = max(max_reloc, nr_reloc);
+
+		/* DWARF relocs are never looked up, so are not worth indexing. */
+		if (is_dwarf_section(rsec->base))
+			continue;
+		if (init_reloc_cache(rsec))
+			return -1;
+		if (!rsec->sorted)
+			nr_linear += nr_reloc;
 	}
 
 	if (opts.stats) {
 		printf("max_reloc: %lu\n", max_reloc);
 		printf("num_relocs: %lu\n", elf->num_relocs);
-		printf("reloc_bits: %d\n", elf->reloc_bits);
+		printf("num_relocs_linear: %lu\n", nr_linear);
 	}
 
 	return 0;
@@ -1327,8 +1452,7 @@ struct elf *elf_create_file(GElf_Ehdr *ehdr, const char *name)
 	if (!elf_alloc_hash(section,		1000) ||
 	    !elf_alloc_hash(section_name,	1000) ||
 	    !elf_alloc_hash(symbol,		10000) ||
-	    !elf_alloc_hash(symbol_name,	10000) ||
-	    !elf_alloc_hash(reloc,		100000))
+	    !elf_alloc_hash(symbol_name,	10000))
 		return NULL;
 
 	null		= elf_create_section(elf, NULL, 0, 0, SHT_NULL, 0, 0);
@@ -1508,6 +1632,8 @@ struct section *elf_create_section(struct elf *elf, const char *name,
 	sec->sh.sh_type = type;
 	sec->sh.sh_addralign = align;
 	sec->sh.sh_flags = flags;
+	/* Relocations objtool adds are indexed as they come. */
+	sec->sorted = type == SHT_RELA;
 
 	if (name) {
 		sec->name = strdup(name);
@@ -1633,16 +1759,6 @@ static int elf_alloc_reloc(struct elf *elf, struct section *rsec)
 	}
 
 	memcpy(new_relocs, old_relocs, nr_relocs_old * sizeof(struct reloc));
-
-	for (int i = 0; i < nr_relocs_old; i++) {
-		struct reloc *old = &old_relocs[i];
-		struct reloc *new = &new_relocs[i];
-		u32 key = reloc_hash(old);
-
-		elf_hash_del(reloc, &old->hash, key);
-		elf_hash_add(reloc, &new->hash, key);
-	}
-
 	free(old_relocs);
 done:
 	rsec->relocs = new_relocs;
