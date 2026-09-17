@@ -12,4 +12,5 @@ IOCTLs
    ioctl-decoding
 
    cdrom
+   cmh_mgmt
    hdio
