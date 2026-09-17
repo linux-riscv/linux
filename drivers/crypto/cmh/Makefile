@@ -22,7 +22,10 @@ cmh-y := \
 	cmh_sm3.o \
 	cmh_aes.o \
 	cmh_aes_aead.o \
-	cmh_aes_cmac.o
+	cmh_aes_cmac.o \
+	cmh_sm4_skcipher.o \
+	cmh_sm4_aead.o \
+	cmh_sm4_cmac.o
 
 # Management ioctl device (/dev/cmh_mgmt): key lifecycle, PKE, PQC ioctls.
 cmh-$(CONFIG_CRYPTO_DEV_CMH_MGMT) += \
