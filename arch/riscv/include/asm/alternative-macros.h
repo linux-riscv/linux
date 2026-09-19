@@ -2,6 +2,12 @@
 #ifndef __ASM_ALTERNATIVE_MACROS_H
 #define __ASM_ALTERNATIVE_MACROS_H
 
+#include <linux/wordpart.h>
+#define PATCH_ID_CPUFEATURE_ID(p)		lower_16_bits(p)
+#define PATCH_ID_CPUFEATURE_VALUE(p)		upper_16_bits(p)
+
+#define RISCV_CPUFEAT_VSTATEOPT	0x1
+
 #ifdef CONFIG_RISCV_ALTERNATIVE
 
 #ifdef __ASSEMBLER__

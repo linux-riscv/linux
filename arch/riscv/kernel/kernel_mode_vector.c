@@ -171,7 +171,9 @@ static int riscv_v_start_kernel_context(void)
 		WARN_ON(riscv_v_ctx_get_depth() == 0);
 		get_cpu_vector_context();
 		if (riscv_preempt_v_dirty(current)) {
+			riscv_v_enable();
 			__riscv_v_vstate_save(kvstate, kvstate->datap);
+			riscv_v_disable();
 			riscv_preempt_v_clear_dirty(current);
 		}
 		riscv_preempt_v_set_restore(current);
@@ -182,14 +184,6 @@ static int riscv_v_start_kernel_context(void)
 	get_cpu_vector_context();
 	__riscv_flush_vector_context();
 	put_cpu_vector_context();
-	/*
-	 *  A voluntary context switch caused by put_cpu_vector_context() can
-	 *  raise the NEED_RESTORE flag if preempt_v starts too early due to a
-	 *  failed risv_v_is_on() check.
-	 *
-	 *  This causes the next context_nesting_end pollute the v-reg from
-	 *  the stale context memory in kernel-mode vector.
-	 */
 	riscv_v_start(RISCV_PREEMPT_V);
 	return 0;
 }
@@ -223,10 +217,13 @@ asmlinkage void riscv_v_context_nesting_end(struct pt_regs *regs)
 	depth = riscv_v_ctx_get_depth();
 	if (depth == 0) {
 		if (riscv_preempt_v_restore(current)) {
+			riscv_v_enable();
 			__riscv_v_vstate_restore(vstate, vstate->datap);
+			riscv_v_disable();
 			__riscv_v_vstate_clean(regs);
 			riscv_preempt_v_reset_flags();
 		}
+		riscv_preempt_v_clear_dirty(current);
 	}
 }
 #else

@@ -1233,6 +1233,20 @@ void __init riscv_user_isa_enable(void)
 		pr_warn("Zicbop disabled as it is unavailable on some harts\n");
 }
 
+/*
+ * Leaving Vector enabled while in the kernel requires the vstate alternatives
+ * to be patched in, so the optimization is only available when alternatives
+ * are built. It can be turned off on the command line to catch illegal use of
+ * Vector in kernel code.
+ */
+bool riscv_v_vstate_opt = IS_ENABLED(CONFIG_RISCV_ALTERNATIVE);
+static int __init riscv_novstateopt_setup(char *__unused)
+{
+	riscv_v_vstate_opt = false;
+	return 0;
+}
+early_param("riscv_novstateopt", riscv_novstateopt_setup);
+
 #ifdef CONFIG_RISCV_ALTERNATIVE
 /*
  * Alternative patch sites consider 48 bits when determining when to patch
@@ -1262,6 +1276,11 @@ static bool riscv_cpufeature_patch_check(u16 id, u16 value)
 		 * then the alternative cannot be applied.
 		 */
 		return riscv_cboz_block_size <= (1U << value);
+	case RISCV_ISA_EXT_ZVE32X:
+		if (value == RISCV_CPUFEAT_VSTATEOPT)
+			return riscv_v_vstate_opt;
+
+		return true;
 	}
 
 	return false;

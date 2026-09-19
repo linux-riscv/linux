@@ -12,6 +12,7 @@
 #include <linux/prctl.h>
 
 #include <asm/thread_info.h>
+#include <asm/cpufeature.h>
 #include <asm/processor.h>
 #include <asm/insn.h>
 #include <asm/vector.h>
@@ -29,9 +30,56 @@ static struct kmem_cache *riscv_v_kernel_cachep;
 unsigned long riscv_v_vsize __read_mostly;
 EXPORT_SYMBOL_GPL(riscv_v_vsize);
 
+/*
+ * Context memory is not coherent to register when sstatus.vs is set to INITIAL. This function
+ * take the INITIAL state into consideration and reflect the nulled state into context memory.
+ * Assume the target task is not actively running when tsk != current
+ */
+void riscv_v_ucontext_save(struct task_struct *tsk)
+{
+	struct __riscv_v_ext_state *vstate = &tsk->thread.vstate;
+	struct pt_regs *regs = task_pt_regs(tsk);
+
+	/*
+	 * Do not set vstate as clean when it is INITIAL, otherwise we lose track of the nulled
+	 * state in ptrace.
+	 */
+	if (tsk == current) {
+		get_cpu_vector_context();
+		if (__riscv_v_vstate_check(regs->status, INITIAL)) {
+			riscv_v_enable();
+			__riscv_v_vstate_discard();
+			__riscv_v_vstate_save(vstate, vstate->datap);
+			riscv_v_disable();
+		} else {
+			riscv_v_vstate_save(vstate, regs);
+		}
+		put_cpu_vector_context();
+	} else if (__riscv_v_vstate_check(regs->status, INITIAL)) {
+		/*
+		 * If we are not current and VS == INITIAL, null out the context memory for tsk
+		 * using kernel mode vector.
+		 */
+		kernel_vector_begin();
+		__riscv_v_vstate_discard();
+		__riscv_v_vstate_save(vstate, vstate->datap);
+		kernel_vector_end();
+	}
+}
+
 int riscv_v_setup_vsize(void)
 {
 	unsigned long this_vsize;
+	bool v_always_on = false;
+
+	/*
+	 * has_vstate_opt() cannot be used here if called from riscv_fill_hwcap(), before
+	 * apply_boot_alternatives(),
+	 */
+	if (__riscv_isa_extension_available(NULL, RISCV_ISA_EXT_ZVE32X) && riscv_v_vstate_opt) {
+		v_always_on = true;
+		csr_set(CSR_SSTATUS, SR_VS_INITIAL);
+	}
 
 	/*
 	 * There are 32 vector registers with vlenb length.
@@ -44,9 +92,11 @@ int riscv_v_setup_vsize(void)
 		return 0;
 	}
 
-	riscv_v_enable();
+	if (!v_always_on)
+		riscv_v_enable();
 	this_vsize = csr_read(CSR_VLENB) * 32;
-	riscv_v_disable();
+	if (!v_always_on)
+		riscv_v_disable();
 
 	if (!riscv_v_vsize) {
 		riscv_v_vsize = this_vsize;
@@ -221,7 +271,7 @@ bool riscv_v_first_use_handler(struct pt_regs *regs)
 		return true;
 	}
 
-	riscv_v_vstate_on(regs);
+	__riscv_v_vstate_clean(regs);
 	riscv_v_vstate_set_restore(current, regs);
 
 	return true;
