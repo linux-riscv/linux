@@ -525,4 +525,5 @@ void __init riscv_acpi_rimt_init(void)
 
 		return;
 	}
+	pci_request_acs();
 }
