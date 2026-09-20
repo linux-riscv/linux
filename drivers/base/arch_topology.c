@@ -498,7 +498,7 @@ static int __init get_cpu_for_node(struct device_node *node)
 }
 
 static int __init parse_core(struct device_node *core, int package_id,
-			     int cluster_id, int core_id)
+			     int die_id, int cluster_id, int core_id)
 {
 	char name[20];
 	bool leaf = true;
@@ -517,6 +517,7 @@ static int __init parse_core(struct device_node *core, int package_id,
 		cpu = get_cpu_for_node(t);
 		if (cpu >= 0) {
 			cpu_topology[cpu].package_id = package_id;
+			cpu_topology[cpu].die_id = die_id;
 			cpu_topology[cpu].cluster_id = cluster_id;
 			cpu_topology[cpu].core_id = core_id;
 			cpu_topology[cpu].thread_id = i;
@@ -538,6 +539,7 @@ static int __init parse_core(struct device_node *core, int package_id,
 		}
 
 		cpu_topology[cpu].package_id = package_id;
+		cpu_topology[cpu].die_id = die_id;
 		cpu_topology[cpu].cluster_id = cluster_id;
 		cpu_topology[cpu].core_id = core_id;
 	} else if (leaf && cpu != -ENODEV) {
@@ -549,7 +551,7 @@ static int __init parse_core(struct device_node *core, int package_id,
 }
 
 static int __init parse_cluster(struct device_node *cluster, int package_id,
-				int cluster_id, int depth)
+				int die_id, int cluster_id, int depth)
 {
 	char name[20];
 	bool leaf = true;
@@ -572,7 +574,7 @@ static int __init parse_cluster(struct device_node *cluster, int package_id,
 			break;
 
 		leaf = false;
-		ret = parse_cluster(c, package_id, i, depth + 1);
+		ret = parse_cluster(c, package_id, die_id, i, depth + 1);
 		if (depth > 0)
 			pr_warn("Topology for clusters of clusters not yet supported\n");
 		if (ret != 0)
@@ -598,7 +600,8 @@ static int __init parse_cluster(struct device_node *cluster, int package_id,
 		}
 
 		if (leaf) {
-			ret = parse_core(c, package_id, cluster_id, core_id++);
+			ret = parse_core(c, package_id, die_id, cluster_id,
+					 core_id++);
 			if (ret != 0)
 				return ret;
 		} else {
@@ -616,6 +619,34 @@ static int __init parse_cluster(struct device_node *cluster, int package_id,
 	return 0;
 }
 
+static int __init parse_die(struct device_node *parent, int package_id)
+{
+	char name[20];
+	bool has_die = false;
+	int die_id = 0, ret;
+
+	do {
+		snprintf(name, sizeof(name), "die%d", die_id);
+		struct device_node *d __free(device_node) =
+			of_get_child_by_name(parent, name);
+
+		if (!d)
+			break;
+
+		has_die = true;
+		ret = parse_cluster(d, package_id, die_id, -1, 0);
+		if (ret)
+			return ret;
+
+		die_id++;
+	} while (1);
+
+	if (!has_die)
+		ret = parse_cluster(parent, package_id, -1, -1, 0);
+
+	return ret;
+}
+
 static int __init parse_socket(struct device_node *socket)
 {
 	char name[20];
@@ -631,7 +662,7 @@ static int __init parse_socket(struct device_node *socket)
 			break;
 
 		has_socket = true;
-		ret = parse_cluster(c, package_id, -1, 0);
+		ret = parse_die(c, package_id);
 		if (ret != 0)
 			return ret;
 
@@ -639,7 +670,7 @@ static int __init parse_socket(struct device_node *socket)
 	} while (1);
 
 	if (!has_socket)
-		ret = parse_cluster(socket, 0, -1, 0);
+		ret = parse_die(socket, 0);
 
 	/*
 	 * Reset the max_smt_thread_num to 1 on failure. Since on failure
@@ -667,10 +698,7 @@ static int __init parse_dt_topology(void)
 		return 0;
 	}
 
-	/*
-	 * When topology is provided cpu-map is essentially a root
-	 * cluster with restricted subnodes.
-	 */
+	/* cpu-map is the root of the processor topology hierarchy. */
 	struct device_node *map __free(device_node) =
 		of_get_child_by_name(cn, "cpu-map");
 
@@ -766,6 +794,14 @@ void update_siblings_masks(unsigned int cpuid)
 		cpumask_set_cpu(cpuid, &cpu_topo->core_sibling);
 		cpumask_set_cpu(cpu, &cpuid_topo->core_sibling);
 
+		if (cpuid_topo->die_id != cpu_topo->die_id)
+			continue;
+
+		if (cpuid_topo->die_id >= 0) {
+			cpumask_set_cpu(cpu, &cpuid_topo->die_sibling);
+			cpumask_set_cpu(cpuid, &cpu_topo->die_sibling);
+		}
+
 		if (cpuid_topo->cluster_id != cpu_topo->cluster_id)
 			continue;
 
@@ -792,6 +828,9 @@ static void clear_cpu_topology(int cpu)
 	cpumask_clear(&cpu_topo->cluster_sibling);
 	cpumask_set_cpu(cpu, &cpu_topo->cluster_sibling);
 
+	cpumask_clear(&cpu_topo->die_sibling);
+	cpumask_set_cpu(cpu, &cpu_topo->die_sibling);
+
 	cpumask_clear(&cpu_topo->core_sibling);
 	cpumask_set_cpu(cpu, &cpu_topo->core_sibling);
 	cpumask_clear(&cpu_topo->thread_sibling);
@@ -808,6 +847,7 @@ void __init reset_cpu_topology(void)
 		cpu_topo->thread_id = -1;
 		cpu_topo->core_id = -1;
 		cpu_topo->cluster_id = -1;
+		cpu_topo->die_id = -1;
 		cpu_topo->package_id = -1;
 
 		clear_cpu_topology(cpu);
@@ -824,6 +864,8 @@ void remove_cpu_topology(unsigned int cpu)
 		cpumask_clear_cpu(cpu, topology_sibling_cpumask(sibling));
 	for_each_cpu(sibling, topology_cluster_cpumask(cpu))
 		cpumask_clear_cpu(cpu, topology_cluster_cpumask(sibling));
+	for_each_cpu(sibling, &cpu_topology[cpu].die_sibling)
+		cpumask_clear_cpu(cpu, &cpu_topology[sibling].die_sibling);
 	for_each_cpu(sibling, topology_llc_cpumask(cpu))
 		cpumask_clear_cpu(cpu, topology_llc_cpumask(sibling));
 
@@ -969,9 +1011,9 @@ void store_cpu_topology(unsigned int cpuid)
 	cpuid_topo->core_id = cpuid;
 	cpuid_topo->package_id = cpu_to_node(cpuid);
 
-	pr_debug("CPU%u: package %d core %d thread %d\n",
-		 cpuid, cpuid_topo->package_id, cpuid_topo->core_id,
-		 cpuid_topo->thread_id);
+	pr_debug("CPU%u: package %d die %d core %d thread %d\n",
+		 cpuid, cpuid_topo->package_id, cpuid_topo->die_id,
+		 cpuid_topo->core_id, cpuid_topo->thread_id);
 
 topology_populated:
 	update_siblings_masks(cpuid);
