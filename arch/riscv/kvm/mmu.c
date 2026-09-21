@@ -349,44 +349,30 @@ bool kvm_unmap_gfn_range(struct kvm *kvm, struct kvm_gfn_range *range)
 	return false;
 }
 
-bool kvm_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
+static bool kvm_riscv_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range,
+			      bool test_only)
 {
-	pte_t *ptep;
-	u32 ptep_level = 0;
-	u64 size = (range->end - range->start) << PAGE_SHIFT;
 	struct kvm_gstage gstage;
 
-	if (!kvm->arch.pgd)
-		return false;
-
-	WARN_ON(size != PAGE_SIZE && size != PMD_SIZE && size != PUD_SIZE);
+	guard(rcu)();
+	lockdep_assert_not_held(&kvm->mmu_lock);
 
 	kvm_riscv_gstage_init(&gstage, kvm);
-	if (!kvm_riscv_gstage_get_leaf(&gstage, range->start << PAGE_SHIFT,
-				       &ptep, &ptep_level))
+	if (!gstage.pgd)
 		return false;
 
-	return ptep_test_and_clear_young(NULL, 0, ptep);
+	return kvm_riscv_gstage_age_range(&gstage, range->start << PAGE_SHIFT,
+					  range->end << PAGE_SHIFT, test_only);
+}
+
+bool kvm_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
+{
+	return kvm_riscv_age_gfn(kvm, range, false);
 }
 
 bool kvm_test_age_gfn(struct kvm *kvm, struct kvm_gfn_range *range)
 {
-	pte_t *ptep;
-	u32 ptep_level = 0;
-	u64 size = (range->end - range->start) << PAGE_SHIFT;
-	struct kvm_gstage gstage;
-
-	if (!kvm->arch.pgd)
-		return false;
-
-	WARN_ON(size != PAGE_SIZE && size != PMD_SIZE && size != PUD_SIZE);
-
-	kvm_riscv_gstage_init(&gstage, kvm);
-	if (!kvm_riscv_gstage_get_leaf(&gstage, range->start << PAGE_SHIFT,
-				       &ptep, &ptep_level))
-		return false;
-
-	return pte_young(ptep_get(ptep));
+	return kvm_riscv_age_gfn(kvm, range, true);
 }
 
 static bool fault_supports_gstage_huge_mapping(struct kvm_memory_slot *memslot,
@@ -769,6 +755,13 @@ int kvm_riscv_mmu_alloc_pgd(struct kvm *kvm)
 	return 0;
 }
 
+static void kvm_riscv_mmu_free_pgd_rcu(struct rcu_head *head)
+{
+	struct page *page = container_of(head, struct page, rcu_head);
+
+	__free_pages(page, get_order(kvm_riscv_gstage_pgd_size));
+}
+
 void kvm_riscv_mmu_free_pgd(struct kvm *kvm)
 {
 	struct kvm_gstage gstage;
@@ -781,9 +774,12 @@ void kvm_riscv_mmu_free_pgd(struct kvm *kvm)
 		flush = kvm_riscv_gstage_unmap_range(&gstage, 0UL,
 			kvm_riscv_gstage_gpa_size(kvm->arch.pgd_levels), false);
 		pgd = READ_ONCE(kvm->arch.pgd);
-		kvm->arch.pgd = NULL;
+		/*
+		 * Keep pgd_levels unchanged for lockless walkers that already
+		 * observed the old root.
+		 */
+		WRITE_ONCE(kvm->arch.pgd, NULL);
 		kvm->arch.pgd_phys = 0;
-		kvm->arch.pgd_levels = 0;
 	}
 	write_unlock(&kvm->mmu_lock);
 
@@ -791,7 +787,7 @@ void kvm_riscv_mmu_free_pgd(struct kvm *kvm)
 		kvm_flush_remote_tlbs(kvm);
 
 	if (pgd)
-		free_pages((unsigned long)pgd, get_order(kvm_riscv_gstage_pgd_size));
+		call_rcu(&virt_to_page(pgd)->rcu_head, kvm_riscv_mmu_free_pgd_rcu);
 
 	kvm_mmu_free_memory_cache(&kvm->arch.pgd_split_page_cache);
 }
