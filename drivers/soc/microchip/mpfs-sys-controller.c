@@ -174,7 +174,8 @@ no_flash:
 	return 0;
 
 out_free_channel:
-	mbox_free_channel(sys_controller->chan);
+	mpfs_sys_controller_put(sys_controller);
+	return ret;
 out_free:
 	kfree(sys_controller);
 	return ret;
