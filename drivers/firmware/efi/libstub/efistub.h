@@ -1078,6 +1078,42 @@ efi_status_t check_platform_features(void);
 
 void *get_efi_config_table(efi_guid_t guid);
 
+enum efi_drtm_policy {
+	EFI_DRTM_OFF,
+	EFI_DRTM_AUTO,
+	EFI_DRTM_ENFORCE,
+};
+
+#ifdef CONFIG_EFI_STUB_DRTM
+extern enum efi_drtm_policy efi_drtm_policy;
+efi_status_t efi_drtm_prepare(void);
+unsigned long efi_drtm_get_extra_size(void);
+efi_status_t efi_drtm_prepare_launch(unsigned long image_base,
+				     unsigned long fdt_addr);
+void efi_drtm_launch(void);
+#else
+enum {efi_drtm_policy = EFI_DRTM_OFF};
+static inline efi_status_t efi_drtm_prepare(void)
+{
+	return EFI_SUCCESS;
+}
+
+static inline unsigned long efi_drtm_get_extra_size(void)
+{
+	return 0;
+}
+
+static inline efi_status_t
+efi_drtm_prepare_launch(unsigned long image_base, unsigned long fdt_addr)
+{
+	return EFI_SUCCESS;
+}
+
+static inline void efi_drtm_launch(void)
+{
+}
+#endif
+
 /* NOTE: These functions do not print a trailing newline after the string */
 void efi_char16_puts(efi_char16_t *);
 void efi_puts(const char *str);
@@ -1175,6 +1211,35 @@ void free_primary_display(struct sysfb_display_info *dpy);
 
 void efi_cache_sync_image(unsigned long image_base,
 			  unsigned long alloc_size);
+
+#ifdef CONFIG_EFI_STUB_IMAGE_INFO
+struct efi_image_info;
+
+static inline const struct efi_image_info *
+efi_get_image_info(unsigned long image_base)
+{
+	/*
+	 * The offset of the struct efi_image_info from the start of the kernel
+	 * image. The linker script of whatever is embedding the stub emits this
+	 * word, see EFI_IMAGE_INFO() for the vmlinux case and zboot.lds for the
+	 * zboot case.
+	 */
+	extern const u32 efi_image_info_offset;
+
+	return (const struct efi_image_info *)(image_base +
+					      efi_image_info_offset);
+}
+
+static inline void *__efi_get_image_symbol(unsigned long image_base,
+					   const __le64 *symbol)
+{
+	return (void *)(image_base + (unsigned long)le64_to_cpup(symbol));
+}
+
+#define efi_get_image_symbol(image_base, symbol) \
+	__efi_get_image_symbol(image_base,       \
+			       &efi_get_image_info(image_base)->symbol);
+#endif
 
 struct efi_smbios_record {
 	u8	type;

@@ -223,12 +223,14 @@ static
 efi_status_t allocate_new_fdt_and_exit_boot(void *handle,
 					    efi_loaded_image_t *image,
 					    unsigned long *new_fdt_addr,
+					    unsigned long kernel_addr,
 					    char *cmdline_ptr)
 {
 	unsigned long desc_size;
 	u32 desc_ver;
 	efi_status_t status;
 	struct exit_boot_struct priv;
+	unsigned long fdt_size_allocated = 0;
 	unsigned long fdt_addr = 0;
 	unsigned long fdt_size = 0;
 
@@ -257,6 +259,7 @@ efi_status_t allocate_new_fdt_and_exit_boot(void *handle,
 			efi_err("Failed to load device tree!\n");
 			goto fail;
 		}
+		fdt_size_allocated = fdt_size;
 	}
 
 	if (fdt_addr) {
@@ -286,6 +289,10 @@ efi_status_t allocate_new_fdt_and_exit_boot(void *handle,
 		efi_err("Unable to construct new device tree.\n");
 		goto fail_free_new_fdt;
 	}
+
+	status = efi_drtm_prepare_launch(kernel_addr, *new_fdt_addr);
+	if (status != EFI_SUCCESS)
+		goto fail_free_new_fdt;
 
 	priv.new_fdt_addr = (void *)*new_fdt_addr;
 
@@ -334,7 +341,7 @@ fail_free_new_fdt:
 	efi_free(MAX_FDT_SIZE, *new_fdt_addr);
 
 fail:
-	efi_free(fdt_size, fdt_addr);
+	efi_free(fdt_size_allocated, fdt_addr);
 	if (!efi_novamap)
 		efi_bs_call(free_pool, priv.runtime_map);
 
@@ -348,7 +355,7 @@ efi_status_t efi_boot_kernel(void *handle, efi_loaded_image_t *image,
 	efi_status_t status;
 
 	status = allocate_new_fdt_and_exit_boot(handle, image, &fdt_addr,
-						cmdline_ptr);
+						kernel_addr, cmdline_ptr);
 	if (status != EFI_SUCCESS) {
 		efi_err("Failed to update FDT and exit boot services\n");
 		return status;
@@ -357,6 +364,7 @@ efi_status_t efi_boot_kernel(void *handle, efi_loaded_image_t *image,
 	if (IS_ENABLED(CONFIG_ARM))
 		efi_handle_post_ebs_state();
 
+	efi_drtm_launch();
 	efi_enter_kernel(kernel_addr, fdt_addr, fdt_totalsize((void *)fdt_addr));
 	/* not reached */
 }

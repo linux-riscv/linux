@@ -57,6 +57,21 @@
 #endif
 
 /*
+ * There aren't any ELF relocations we can use to endian-swap values known only
+ * at link time (e.g. the subtraction of two symbol addresses), so we must get
+ * the linker to endian-swap certain values before emitting them.
+ */
+#ifdef CONFIG_CPU_BIG_ENDIAN
+#define DATA_LE32(data)				\
+	((((data) & 0x000000ff) << 24) |	\
+	 (((data) & 0x0000ff00) << 8)  |	\
+	 (((data) & 0x00ff0000) >> 8)  |	\
+	 (((data) & 0xff000000) >> 24))
+#else
+#define DATA_LE32(data) ((data) & 0xffffffff)
+#endif
+
+/*
  * Only some architectures want to have the .notes segment visible in
  * a separate PT_NOTE ELF Program Header. When this happens, it needs
  * to be visible in both the kernel text's PT_LOAD and the PT_NOTE
@@ -81,6 +96,48 @@
 #define RO_EXCEPTION_TABLE	EXCEPTION_TABLE(RO_EXCEPTION_TABLE_ALIGN)
 #else
 #define RO_EXCEPTION_TABLE
+#endif
+
+/*
+ * Architecture specific information made available to the EFI stub, see
+ * CONFIG_EFI_STUB_IMAGE_INFO. The architecture describes the data with a
+ * struct efi_image_info in its asm/image.h and emits the matching bytes here
+ * through contents, using linker expressions the compiler cannot compute.
+ *
+ * Place in the same section as INIT_DATA.
+ *
+ * The architecture must also define EFI_IMAGE_INFO_SIZE to sizeof(struct
+ * efi_image_info), and that definition has to be visible to the linker script
+ * before this macro is used. Keeping the two in sync is checked by a
+ * static_assert() next to the struct and by the ASSERT() below.
+ *
+ * The struct's offset from _text is emitted as a u32 at
+ * __efi_image_info_offset, which is what the stub's efi_get_image_info()
+ * reads. The arch has to alias it into the stub's symbol namespace. The
+ * absolute _efi_image_info_offset is the same value, it is extracted from
+ * vmlinux with nm and injected into the zboot stub, see Makefile.zboot.
+ */
+#ifdef CONFIG_EFI_STUB_IMAGE_INFO
+#define EFI_IMAGE_INFO_ENTRY(value)            \
+	LONG(DATA_LE32((value) & 0xffffffff)); \
+	LONG(DATA_LE32((value) >> 32))
+#define EFI_IMAGE_INFO_OFFSET(symbol) EFI_IMAGE_INFO_ENTRY(symbol - _text)
+
+#define EFI_IMAGE_INFO(contents)                                               \
+	.= ALIGN(8);                                                           \
+	__efi_image_info =.;                                                   \
+	contents;                                                              \
+	__efi_image_info_end =.;                                               \
+	ASSERT(__efi_image_info_end - __efi_image_info == EFI_IMAGE_INFO_SIZE, \
+	       "invalid EFI image-info size");                                 \
+	_efi_image_info_offset = ABSOLUTE(__efi_image_info - _text);           \
+	ASSERT(_efi_image_info_offset <= 0xffffffff,                           \
+	       "EFI image-info offset does not fit in u32");                   \
+	.= ALIGN(4);                                                           \
+	__efi_image_info_offset =.;                                            \
+	LONG(_efi_image_info_offset);
+#else
+#define EFI_IMAGE_INFO(contents)
 #endif
 
 /* Align . function alignment. */
