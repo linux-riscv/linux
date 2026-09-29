@@ -25,7 +25,15 @@
 #define RPMI_TEE_SRV_PROBE_SYSTEM	0x03
 #define RPMI_TEE_SRV_CALL		0x13
 
+#define RPMI_TEE_FEATURE_MEMORY_LEND		2
+#define RPMI_TEE_FEATURE_MEMORY_SHARE		3
+#define RPMI_TEE_FEATURE_SIGNAL_BUS		4
+#define RPMI_TEE_FEATURE_MULTISEGMENT_OPS	5
 #define RPMI_TEE_FEATURE_SYSINFO_FORMAT	6
+
+#define RPMI_TEE_MEMORY_FEATURE_UNSUPPORTED		0
+#define RPMI_TEE_MEMORY_FEATURE_TEE_ONLY		1
+#define RPMI_TEE_MEMORY_FEATURE_FULLY_SUPPORTED	2
 
 #define RPMI_TEE_SYSTEM_WHOLE		0
 #define RPMI_TEE_SYSTEM_SELF		3
@@ -581,6 +589,7 @@ static int rpmi_tee_setup_endpoints(struct rpmi_tee_transport *priv)
 static int rpmi_tee_transport_probe(struct platform_device *pdev)
 {
 	struct rpmi_tee_transport *priv;
+	u32 value;
 	int ret;
 
 	priv = devm_kzalloc(&pdev->dev, sizeof(*priv), GFP_KERNEL);
@@ -603,6 +612,37 @@ static int rpmi_tee_transport_probe(struct platform_device *pdev)
 			      "invalid RPMI TEE mailbox channel\n");
 		goto out_failed;
 	}
+
+	ret = rpmi_tee_probe_features(priv, RPMI_TEE_FEATURE_SYSINFO_FORMAT,
+				      &value);
+	if (ret)
+		goto out_failed;
+	if (!(value & RPMI_TEE_SYSINFO_FORMAT_TABLE)) {
+		ret = -EOPNOTSUPP;
+		goto out_failed;
+	}
+
+	ret = rpmi_tee_probe_features(priv, RPMI_TEE_FEATURE_MEMORY_LEND,
+				      &value);
+	if (ret)
+		goto out_failed;
+	priv->mem.lend_ok = value == RPMI_TEE_MEMORY_FEATURE_FULLY_SUPPORTED;
+
+	ret = rpmi_tee_probe_features(priv, RPMI_TEE_FEATURE_MEMORY_SHARE,
+				      &value);
+	if (ret)
+		goto out_failed;
+	priv->mem.share_ok = value == RPMI_TEE_MEMORY_FEATURE_FULLY_SUPPORTED;
+
+	ret = rpmi_tee_probe_features(priv, RPMI_TEE_FEATURE_MULTISEGMENT_OPS,
+				      &priv->mem.multisegment_max);
+	if (ret)
+		goto out_failed;
+
+	ret = rpmi_tee_probe_features(priv, RPMI_TEE_FEATURE_SIGNAL_BUS,
+				      &priv->notif.feature);
+	if (ret)
+		goto out_failed;
 
 	ret = rpmi_tee_setup_endpoints(priv);
 	if (ret) {
