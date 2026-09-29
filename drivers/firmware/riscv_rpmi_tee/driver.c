@@ -7,12 +7,100 @@
 
 #include <linux/mailbox_client.h>
 #include <linux/mailbox/riscv-rpmi-message.h>
+#include <linux/cleanup.h>
+#include <linux/list.h>
 #include <linux/module.h>
 #include <linux/of.h>
+#include <linux/overflow.h>
 #include <linux/platform_device.h>
 #include <linux/rpmi_tee.h>
+#include <linux/slab.h>
+#include <linux/unaligned.h>
+
+#include "sysinfo.h"
 
 #define RPMI_SRVGRP_TEE		0x10
+
+#define RPMI_TEE_SRV_PROBE_FEATURES	0x02
+#define RPMI_TEE_SRV_PROBE_SYSTEM	0x03
+#define RPMI_TEE_SRV_CALL		0x13
+
+#define RPMI_TEE_FEATURE_SYSINFO_FORMAT	6
+
+#define RPMI_TEE_SYSTEM_WHOLE		0
+#define RPMI_TEE_SYSTEM_SELF		3
+
+/**
+ * struct rpmi_tee_probe_features_req - TEE_PROBE_FEATURES request
+ * @feature_id: TEE feature identifier to query.
+ */
+struct rpmi_tee_probe_features_req {
+	__le32 feature_id;
+} __packed;
+
+/**
+ * struct rpmi_tee_probe_features_resp - TEE_PROBE_FEATURES response
+ * @status: RPMI completion status.
+ * @value: Feature-specific value.
+ */
+struct rpmi_tee_probe_features_resp {
+	__le32 status;
+	__le32 value;
+} __packed;
+
+/**
+ * struct rpmi_tee_probe_system_req - TEE_PROBE_SYSTEM request
+ * @format: Requested system-information format.
+ * @target_type: Requested system-information target type.
+ * @target_len: Target-specific request data length.
+ * @target: Target-specific request data.
+ */
+struct rpmi_tee_probe_system_req {
+	__le32 format;
+	__le32 target_type;
+	__le32 target_len;
+	u8 target[];
+} __packed;
+
+/**
+ * struct rpmi_tee_probe_system_resp - TEE_PROBE_SYSTEM response prefix
+ * @status: RPMI completion status.
+ * @data_len: Length of the following system-information data.
+ * @data: System-information data in the requested format.
+ */
+struct rpmi_tee_probe_system_resp {
+	__le32 status;
+	__le32 data_len;
+	u8 data[];
+} __packed;
+
+/**
+ * struct rpmi_tee_call_req - TEE_CALL request prefix
+ * @sender_id: Calling REE endpoint identifier.
+ * @target_id: Destination TEE endpoint identifier.
+ * @service: UUID of the target service.
+ * @service_data_len: Length of @service_data in bytes.
+ * @service_data: Service-defined request data.
+ */
+struct rpmi_tee_call_req {
+	__le32 sender_id;
+	__le32 target_id;
+	u8 service[UUID_SIZE];
+	__le32 service_data_len;
+	u8 service_data[];
+} __packed;
+
+/**
+ * struct rpmi_tee_call_resp - TEE_CALL response prefix
+ * @status: RPMI completion status.
+ * @service_data_len: Length of @service_data in bytes.
+ * @service_data: Service-defined response data.
+ */
+struct rpmi_tee_call_resp {
+	__le32 status;
+	__le32 service_data_len;
+	u8 service_data[];
+} __packed;
 
 struct rpmi_tee_mbox {
 	struct mbox_client client;
@@ -20,10 +108,86 @@ struct rpmi_tee_mbox {
 	u32 max_msg_data_size;
 };
 
+struct rpmi_tee_child {
+	struct list_head node;
+	struct rpmi_tee_device *rdev;
+};
+
 struct rpmi_tee_transport {
 	struct device *dev;
 	struct rpmi_tee_mbox mbox;
+	u32 self_id;
+	struct list_head devices;
 };
+
+/* __rpmi_tee_send() - Send an RPMI TEE service request. */
+static int __rpmi_tee_send(struct rpmi_tee_transport *priv, u32 service_id,
+			   const void *req, size_t req_len, void *resp,
+			   size_t *resp_len, s32 *status)
+{
+	size_t max_resp_len = *resp_len;
+	struct rpmi_mbox_message msg;
+	int ret;
+
+	if (req_len > priv->mbox.max_msg_data_size ||
+	    max_resp_len > priv->mbox.max_msg_data_size)
+		return -EMSGSIZE;
+
+	rpmi_mbox_init_send_with_response(&msg, service_id, (void *)req,
+					  req_len, resp, max_resp_len);
+	ret = rpmi_mbox_send_message_sync(priv->mbox.chan, &msg);
+	if (ret)
+		return ret;
+	/* At least STATUS word should be present. */
+	if (msg.data.out_response_len < sizeof(__le32))
+		return -EPROTO;
+
+	*resp_len = msg.data.out_response_len;
+	*status = (s32)get_unaligned_le32(resp);
+
+	return 0;
+}
+
+/**
+ * rpmi_tee_send() - Send an RPMI TEE service request
+ * @priv: RPMI TEE transport
+ * @service_id: RPMI TEE service identifier
+ * @req: Request data
+ * @req_len: Request data length
+ * @resp: Response data buffer, or %NULL for a status-only response
+ * @resp_len: On entry, response buffer capacity; on success, response length
+ *
+ * Pass both @resp and @resp_len as %NULL when the service has no response
+ * payload beyond the mandatory RPMI status word.
+ *
+ * Return: 0 on success, or a negative error code.
+ */
+static int rpmi_tee_send(struct rpmi_tee_transport *priv, u32 service_id,
+			 const void *req, size_t req_len, void *resp,
+			 size_t *resp_len)
+{
+	__le32 status_resp;
+	size_t status_resp_len = sizeof(status_resp);
+	s32 status;
+	int ret;
+
+	if (!resp && !resp_len) {
+		resp = &status_resp;
+		resp_len = &status_resp_len;
+	} else if (!resp || !resp_len) {
+		return -EINVAL;
+	}
+
+	ret = __rpmi_tee_send(priv, service_id, req, req_len, resp, resp_len,
+			      &status);
+	if (ret)
+		return ret;
+
+	if (status == RPMI_ERR_NO_DATA)
+		return -ENODATA;
+
+	return rpmi_to_linux_error(status);
+}
 
 /**
  * rpmi_tee_get_attr() - Get an RPMI mailbox attribute
@@ -77,10 +241,341 @@ static int rpmi_tee_check_transport(struct rpmi_tee_transport *priv)
 	ret = rpmi_tee_get_attr(priv, RPMI_MBOX_ATTR_MAX_MSG_DATA_SIZE, &value);
 	if (ret)
 		return ret;
+	/* The mandatory TEE_CALL request and response must fit the mailbox. */
+	if (value < sizeof(struct rpmi_tee_call_req) ||
+	    value < sizeof(struct rpmi_tee_call_resp))
+		return -EMSGSIZE;
 
 	priv->mbox.max_msg_data_size = value;
 
 	return 0;
+}
+
+/* RPMI TEE SERVICE GRP API. */
+
+/* TEE_PROBE_FEATURES. */
+static int rpmi_tee_probe_features(struct rpmi_tee_transport *priv,
+				   u32 feature_id, u32 *value)
+{
+	struct rpmi_tee_probe_features_req req = {
+		.feature_id = cpu_to_le32(feature_id),
+	};
+	struct rpmi_tee_probe_features_resp resp;
+	size_t resp_len = sizeof(resp);
+	int ret;
+
+	ret = rpmi_tee_send(priv, RPMI_TEE_SRV_PROBE_FEATURES, &req,
+			    sizeof(req), &resp, &resp_len);
+	if (ret)
+		return ret;
+	if (resp_len != sizeof(resp))
+		return -EPROTO;
+
+	*value = get_unaligned_le32(&resp.value);
+
+	return 0;
+}
+
+/**
+ * rpmi_tee_probe_system - retrieve a TEE system-information description
+ * @priv: RPMI TEE transport.
+ * @target_type: System-information target type.
+ * @data: Returns an allocated system-information buffer.
+ * @data_len: Returns the size of @data in bytes.
+ *
+ * Supports only the Whole-system and Self targets, which have no target data.
+ * The caller owns the returned buffer in @data and must free them with kfree().
+ *
+ * Return: 0 on success, or a negative error code.
+ */
+static int rpmi_tee_probe_system(struct rpmi_tee_transport *priv,
+				 u32 target_type, void **data, size_t *data_len)
+{
+	struct rpmi_tee_probe_system_req req = {
+		.format = cpu_to_le32(RPMI_TEE_SYSINFO_FORMAT_TABLE),
+		.target_type = cpu_to_le32(target_type),
+		/* Whole-system and Self probes have no target data. */
+		.target_len = 0,
+	};
+	size_t resp_len = priv->mbox.max_msg_data_size;
+	u32 len;
+	int ret;
+
+	if (target_type != RPMI_TEE_SYSTEM_WHOLE &&
+	    target_type != RPMI_TEE_SYSTEM_SELF)
+		return -EINVAL;
+
+	struct rpmi_tee_probe_system_resp *resp __free(kfree) =
+		kzalloc(resp_len, GFP_KERNEL);
+	if (!resp)
+		return -ENOMEM;
+
+	ret = rpmi_tee_send(priv, RPMI_TEE_SRV_PROBE_SYSTEM, &req, sizeof(req),
+			    resp, &resp_len);
+	if (ret)
+		return ret;
+
+	if (resp_len < sizeof(*resp))
+		return -EPROTO;
+	len = get_unaligned_le32(&resp->data_len);
+	if (len != resp_len - sizeof(*resp))
+		return -EPROTO;
+
+	/* Keep the system data. */
+	*data = kmemdup(resp->data, len, GFP_KERNEL);
+	if (!*data)
+		return -ENOMEM;
+
+	*data_len = len;
+
+	return 0;
+}
+
+/* Retrieve the local REE endpoint identifier. */
+static int rpmi_tee_parse_self(struct rpmi_tee_transport *priv, u32 *self_id)
+{
+	void *data __free(kfree) = NULL;
+	size_t data_len;
+	int ret;
+
+	ret = rpmi_tee_probe_system(priv, RPMI_TEE_SYSTEM_SELF, &data,
+				    &data_len);
+	if (ret)
+		return ret;
+
+	return rpmi_tee_sysinfo_parse_self(data, data_len, self_id);
+}
+
+/**
+ * rpmi_tee_parse_system() - Retrieve and parse Whole-system SYSINFO
+ * @priv: RPMI TEE transport.
+ * @system: Returned endpoint and service discovery records.
+ *
+ * Retrieve the Whole-system SYSINFO description. The caller owns the arrays
+ * in @system on success and must free them with kfree().
+ *
+ * Return: 0 on success, or a negative error code.
+ */
+static int rpmi_tee_parse_system(struct rpmi_tee_transport *priv,
+				 struct rpmi_tee_sysinfo_system *system)
+{
+	void *data __free(kfree) = NULL;
+	size_t data_len;
+	int ret;
+
+	/* Start with no output storage to obtain the required record counts. */
+	*system = (struct rpmi_tee_sysinfo_system) {};
+
+	ret = rpmi_tee_probe_system(priv, RPMI_TEE_SYSTEM_WHOLE, &data,
+				    &data_len);
+	if (ret)
+		return ret;
+
+	ret = rpmi_tee_sysinfo_parse_system(data, data_len, priv->self_id,
+					    system);
+	if (ret != -ENOSPC)
+		return ret;
+
+	if (system->ep_count) {
+		system->ep_capacity = system->ep_count;
+		system->eps = kcalloc(system->ep_capacity, sizeof(*system->eps),
+				      GFP_KERNEL);
+		if (!system->eps)
+			return -ENOMEM;
+	}
+
+	if (system->service_count) {
+		system->service_capacity = system->service_count;
+		system->services = kcalloc(system->service_capacity,
+					   sizeof(*system->services), GFP_KERNEL);
+		if (!system->services) {
+			kfree(system->eps);
+			return -ENOMEM;
+		}
+	}
+
+	ret = rpmi_tee_sysinfo_parse_system(data, data_len, priv->self_id,
+					    system);
+	if (ret) {
+		kfree(system->services);
+		kfree(system->eps);
+	}
+
+	return ret;
+}
+
+/**
+ * rpmi_tee_op_call - Invoke a service offered by a TEE endpoint
+ * @rdev: TEE service device.
+ * @req: Service-defined request data.
+ * @req_len: Length of @req in bytes.
+ * @resp: Buffer for service-defined response data.
+ * @resp_len: On entry, capacity of @resp; on success, response length.
+ *
+ * MPXY can return -ENOSPC after the TEE has processed the request when the
+ * response exceeds the supplied buffer. Callers must not blindly retry a
+ * non-idempotent request in that case.
+ *
+ * Return: 0 on success, or a negative error code.
+ */
+/* Return the transport that owns @rdev. */
+static struct rpmi_tee_transport *
+rpmi_tee_device_to_transport(struct rpmi_tee_device *rdev)
+{
+	return dev_get_drvdata(rdev->dev.parent);
+}
+
+static int rpmi_tee_op_call(struct rpmi_tee_device *rdev, const void *req,
+			    size_t req_len, void *resp, size_t *resp_len)
+{
+	struct rpmi_tee_transport *priv = rpmi_tee_device_to_transport(rdev);
+	size_t call_req_len, call_resp_len;
+	u32 service_data_len;
+	int ret;
+
+	if (!resp_len || (!req && req_len) || (!resp && *resp_len))
+		return -EINVAL;
+
+	/* TEE_CALL payload must fit the mailbox. */
+	if (req_len > priv->mbox.max_msg_data_size -
+		sizeof(struct rpmi_tee_call_req) ||
+	    *resp_len > priv->mbox.max_msg_data_size -
+		sizeof(struct rpmi_tee_call_resp))
+		return -EMSGSIZE;
+
+	call_req_len = sizeof(struct rpmi_tee_call_req) + req_len;
+	call_resp_len = sizeof(struct rpmi_tee_call_resp) + *resp_len;
+
+	struct rpmi_tee_call_req *call_req __free(kfree) =
+		kzalloc(call_req_len, GFP_KERNEL);
+	if (!call_req)
+		return -ENOMEM;
+
+	struct rpmi_tee_call_resp *call_resp __free(kfree) =
+		kzalloc(call_resp_len, GFP_KERNEL);
+	if (!call_resp)
+		return -ENOMEM;
+
+	call_req->sender_id = cpu_to_le32(priv->self_id);
+	call_req->target_id = cpu_to_le32(rdev->endpoint_id);
+	export_uuid(call_req->service, &rdev->uuid);
+	call_req->service_data_len = cpu_to_le32(req_len);
+	if (req_len)
+		memcpy(call_req->service_data, req, req_len);
+	/* Make TEE CALL. */
+	ret = rpmi_tee_send(priv, RPMI_TEE_SRV_CALL, call_req, call_req_len,
+			    call_resp, &call_resp_len);
+	if (ret)
+		return ret;
+
+	if (call_resp_len < sizeof(*call_resp))
+		return -EPROTO;
+	service_data_len = get_unaligned_le32(&call_resp->service_data_len);
+	if (service_data_len != call_resp_len - sizeof(*call_resp))
+		return -EPROTO;
+
+	if (service_data_len)
+		memcpy(resp, call_resp->service_data, service_data_len);
+	*resp_len = service_data_len;
+
+	return 0;
+}
+
+static const struct rpmi_tee_msg_ops rpmi_tee_msg_ops = {
+	.call = rpmi_tee_op_call,
+};
+
+static const struct rpmi_tee_ops rpmi_tee_ops = {
+	.msg_ops = &rpmi_tee_msg_ops,
+};
+
+static void rpmi_tee_unregister_devices(struct rpmi_tee_transport *priv)
+{
+	struct rpmi_tee_child *child, *tmp;
+
+	list_for_each_entry_safe(child, tmp, &priv->devices, node) {
+		list_del(&child->node);
+		rpmi_tee_device_unregister(child->rdev);
+		kfree(child);
+	}
+}
+
+static struct rpmi_tee_device *
+rpmi_tee_find_device(struct rpmi_tee_transport *priv, const uuid_t *uuid,
+		     u32 endpoint_id)
+{
+	struct rpmi_tee_child *child;
+
+	list_for_each_entry(child, &priv->devices, node) {
+		if (child->rdev->endpoint_id == endpoint_id &&
+		    uuid_equal(&child->rdev->uuid, uuid))
+			return child->rdev;
+	}
+
+	return NULL;
+}
+
+static int
+rpmi_tee_register_devices(struct rpmi_tee_transport *priv,
+			  const struct rpmi_tee_sysinfo_service_info *services,
+			  size_t service_count)
+{
+	size_t i;
+	int ret;
+
+	for (i = 0; i < service_count; i++) {
+		const struct rpmi_tee_sysinfo_service_info *service = &services[i];
+
+		/* Discard duplicate devices in the same endpoint. */
+		if (rpmi_tee_find_device(priv, &service->uuid,
+					 service->endpoint_id))
+			continue;
+
+		struct rpmi_tee_child *child __free(kfree) =
+			kzalloc_obj(*child, GFP_KERNEL);
+		if (!child) {
+			ret = -ENOMEM;
+			goto err_unregister;
+		}
+		child->rdev = rpmi_tee_device_register(&service->uuid,
+						       service->endpoint_id,
+						       &rpmi_tee_ops,
+						       priv->dev);
+		if (IS_ERR(child->rdev)) {
+			ret = PTR_ERR(child->rdev);
+			goto err_unregister;
+		}
+
+		list_add_tail(&no_free_ptr(child)->node, &priv->devices);
+	}
+
+	return 0;
+
+err_unregister:
+	rpmi_tee_unregister_devices(priv);
+
+	return ret;
+}
+
+static int rpmi_tee_setup_endpoints(struct rpmi_tee_transport *priv)
+{
+	struct rpmi_tee_sysinfo_system system;
+	int ret;
+
+	ret = rpmi_tee_parse_self(priv, &priv->self_id);
+	if (ret)
+		return ret;
+
+	ret = rpmi_tee_parse_system(priv, &system);
+	if (ret)
+		return ret;
+
+	ret = rpmi_tee_register_devices(priv, system.services,
+					system.service_count);
+	kfree(system.services);
+	kfree(system.eps);
+
+	return ret;
 }
 
 static int rpmi_tee_transport_probe(struct platform_device *pdev)
@@ -94,6 +589,7 @@ static int rpmi_tee_transport_probe(struct platform_device *pdev)
 
 	priv->dev = &pdev->dev;
 	platform_set_drvdata(pdev, priv);
+	INIT_LIST_HEAD(&priv->devices);
 	priv->mbox.client.dev = &pdev->dev;
 	priv->mbox.client.tx_sync = true;
 	priv->mbox.chan = mbox_request_channel(&priv->mbox.client, 0);
@@ -105,6 +601,13 @@ static int rpmi_tee_transport_probe(struct platform_device *pdev)
 	if (ret) {
 		dev_err_probe(&pdev->dev, ret,
 			      "invalid RPMI TEE mailbox channel\n");
+		goto out_failed;
+	}
+
+	ret = rpmi_tee_setup_endpoints(priv);
+	if (ret) {
+		dev_err_probe(&pdev->dev, ret,
+			      "failed to discover RPMI TEE services\n");
 		goto out_failed;
 	}
 
@@ -120,6 +623,7 @@ static void rpmi_tee_transport_remove(struct platform_device *pdev)
 {
 	struct rpmi_tee_transport *priv = platform_get_drvdata(pdev);
 
+	rpmi_tee_unregister_devices(priv);
 	mbox_free_channel(priv->mbox.chan);
 }
 
