@@ -54,6 +54,7 @@
 #include "arm-spe.h"
 #include "hisi-ptt.h"
 #include "s390-cpumsf.h"
+#include "gtrace.h"
 #include "util/mmap.h"
 #include "powerpc-vpadtl.h"
 
@@ -1431,6 +1432,9 @@ int perf_event__process_auxtrace_info(const struct perf_tool *tool __maybe_unuse
 		break;
 	case PERF_AUXTRACE_VPA_DTL:
 		err = powerpc_vpadtl_process_auxtrace_info(event, session);
+		break;
+	case PERF_AUXTRACE_GTRACE:
+		err = gtrace__process_auxtrace_info(event, session);
 		break;
 	case PERF_AUXTRACE_UNKNOWN:
 	default:
