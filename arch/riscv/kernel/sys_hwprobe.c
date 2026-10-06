@@ -14,6 +14,7 @@
 #include <asm/switch_to.h>
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
+#include <asm/usercfi.h>
 #include <asm/vector.h>
 #include <asm/vendor_extensions/mips_hwprobe.h>
 #include <asm/vendor_extensions/sifive_hwprobe.h>
@@ -91,6 +92,19 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 	if (has_vector() && riscv_isa_extension_available(NULL, V))
 		pair->value |= RISCV_HWPROBE_IMA_V;
 
+	if (riscv_isa_extension_available(NULL, ZICBOM))
+		pair->value |= RISCV_HWPROBE_EXT_ZICBOM;
+
+	if (riscv_isa_extension_available(NULL, ZICBOZ))
+		pair->value |= RISCV_HWPROBE_EXT_ZICBOZ;
+
+	if (is_user_lpad_enabled())
+		pair->value |= RISCV_HWPROBE_EXT_ZICFILP;
+
+	if (IS_ENABLED(CONFIG_RISCV_ISA_SUPM) &&
+	    riscv_isa_extension_available(NULL, SUPM))
+		pair->value |= RISCV_HWPROBE_EXT_SUPM;
+
 	/*
 	 * Loop through and record extensions that 1) anyone has, and 2) anyone
 	 * doesn't have.
@@ -120,10 +134,7 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 		EXT_KEY(isainfo->isa, ZCB, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZCLSD, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZCMOP, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZICBOM, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZICBOP, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZICBOZ, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZICFILP, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZICNTR, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZICOND, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZIHINTNTL, pair->value, missing);
@@ -146,15 +157,8 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 		if (has_vector()) {
 			EXT_KEY(isainfo->isa, ZVBB, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVBC, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVE32F, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVE32X, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVE64D, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVE64F, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVE64X, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVFBFMIN, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVFBFWMA, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVFH, pair->value, missing);
-			EXT_KEY(isainfo->isa, ZVFHMIN, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVKB, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVKG, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVKNED, pair->value, missing);
@@ -163,17 +167,26 @@ static void hwprobe_isa_ext0(struct riscv_hwprobe *pair,
 			EXT_KEY(isainfo->isa, ZVKSED, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVKSH, pair->value, missing);
 			EXT_KEY(isainfo->isa, ZVKT, pair->value, missing);
+
+			if (has_fpu()) {
+				EXT_KEY(isainfo->isa, ZVE32F, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVE64D, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVE64F, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVFBFMIN, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVFBFWMA, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVFH, pair->value, missing);
+				EXT_KEY(isainfo->isa, ZVFHMIN, pair->value, missing);
+			}
 		}
 
-		EXT_KEY(isainfo->isa, ZCD, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZCF, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZFA, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZFBFMIN, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZFH, pair->value, missing);
-		EXT_KEY(isainfo->isa, ZFHMIN, pair->value, missing);
-
-		if (IS_ENABLED(CONFIG_RISCV_ISA_SUPM))
-			EXT_KEY(isainfo->isa, SUPM, pair->value, missing);
+		if (has_fpu()) {
+			EXT_KEY(isainfo->isa, ZCD, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZCF, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZFA, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZFBFMIN, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZFH, pair->value, missing);
+			EXT_KEY(isainfo->isa, ZFHMIN, pair->value, missing);
+		}
 	}
 
 	/* Now turn off reporting features if any CPU is missing it. */
@@ -188,6 +201,9 @@ static void hwprobe_isa_ext1(struct riscv_hwprobe *pair,
 
 	pair->value = 0;
 
+	if (is_user_shstk_enabled())
+		pair->value |= RISCV_HWPROBE_EXT_ZICFISS;
+
 	/*
 	 * Loop through and record extensions that 1) anyone has, and 2) anyone
 	 * doesn't have.
@@ -201,7 +217,6 @@ static void hwprobe_isa_ext1(struct riscv_hwprobe *pair,
 		 * configuration, as no other checks, besides presence
 		 * in the hart_isa bitmap, are made.
 		 */
-		EXT_KEY(isainfo->isa, ZICFISS, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZICCLSM, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZICCAMOA, pair->value, missing);
 		EXT_KEY(isainfo->isa, ZICCIF, pair->value, missing);
